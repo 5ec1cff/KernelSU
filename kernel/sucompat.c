@@ -164,31 +164,6 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 	return 0;
 }
 
-int ksu_handle_devpts(struct inode *inode)
-{
-	if (!current->mm) {
-		return 0;
-	}
-
-	uid_t uid = current_uid().val;
-	if (uid % 100000 < 10000) {
-		// not untrusted_app, ignore it
-		return 0;
-	}
-
-	if (!ksu_is_allow_uid(uid))
-		return 0;
-
-	if (ksu_devpts_sid) {
-		struct inode_security_struct *sec = selinux_inode(inode);
-		if (sec) {
-			sec->sid = ksu_devpts_sid;
-		}
-	}
-
-	return 0;
-}
-
 #ifdef CONFIG_KPROBES
 
 static int sys_faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
@@ -236,21 +211,6 @@ static struct kprobe execve_kp = {
 	.symbol_name = SYS_EXECVE_SYMBOL,
 	.pre_handler = sys_execve_handler_pre,
 };
-
-static int pts_unix98_lookup_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	struct inode *inode;
-	struct file *file = (struct file *)PT_REGS_PARM2(regs);
-	inode = file->f_path.dentry->d_inode;
-
-	return ksu_handle_devpts(inode);
-}
-
-static struct kprobe pts_unix98_lookup_kp = { .symbol_name =
-						      "pts_unix98_lookup",
-					      .pre_handler =
-						      pts_unix98_lookup_pre };
-
 #endif
 
 // sucompat: permited process can execute 'su' to gain root access.
@@ -264,8 +224,6 @@ void ksu_sucompat_init()
 	pr_info("sucompat: newfstatat_kp: %d\n", ret);
 	ret = register_kprobe(&faccessat_kp);
 	pr_info("sucompat: faccessat_kp: %d\n", ret);
-	ret = register_kprobe(&pts_unix98_lookup_kp);
-	pr_info("sucompat: devpts_kp: %d\n", ret);
 #endif
 }
 
@@ -275,6 +233,5 @@ void ksu_sucompat_exit()
 	unregister_kprobe(&execve_kp);
 	unregister_kprobe(&newfstatat_kp);
 	unregister_kprobe(&faccessat_kp);
-	unregister_kprobe(&pts_unix98_lookup_kp);
 #endif
 }
