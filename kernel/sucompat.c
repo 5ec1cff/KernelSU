@@ -7,7 +7,6 @@
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/fs.h>
-#include <linux/kprobes.h>
 #include <linux/tracepoint.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -177,30 +176,6 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
     return 0;
 }
 
-int ksu_handle_devpts(struct inode *inode)
-{
-    if (!current->mm) {
-        return 0;
-    }
-
-    uid_t uid = current_uid().val;
-    if (uid % 100000 < 10000) {
-        // not untrusted_app, ignore it
-        return 0;
-    }
-
-    if (!ksu_is_allow_uid_for_current(uid))
-        return 0;
-
-    if (ksu_devpts_sid) {
-        struct inode_security_struct *sec = selinux_inode(inode);
-        if (sec) {
-            sec->sid = ksu_devpts_sid;
-        }
-    }
-
-    return 0;
-}
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
 
@@ -238,50 +213,6 @@ static void sucompat_sys_enter_handler(void *data, struct pt_regs *regs,
 }
 
 #endif // CONFIG_HAVE_SYSCALL_TRACEPOINTS
-
-#ifdef CONFIG_KPROBES
-
-static int pts_unix98_lookup_pre(struct kprobe *p, struct pt_regs *regs)
-{
-    struct inode *inode;
-    struct file *file = (struct file *)PT_REGS_PARM2(regs);
-    inode = file->f_path.dentry->d_inode;
-
-    return ksu_handle_devpts(inode);
-}
-
-static struct kprobe *init_kprobe(const char *name,
-                                  kprobe_pre_handler_t handler)
-{
-    struct kprobe *kp = kzalloc(sizeof(struct kprobe), GFP_KERNEL);
-    if (!kp)
-        return NULL;
-    kp->symbol_name = name;
-    kp->pre_handler = handler;
-
-    int ret = register_kprobe(kp);
-    pr_info("sucompat: register_%s kprobe: %d\n", name, ret);
-    if (ret) {
-        kfree(kp);
-        return NULL;
-    }
-
-    return kp;
-}
-
-static void destroy_kprobe(struct kprobe **kp_ptr)
-{
-    struct kprobe *kp = *kp_ptr;
-    if (!kp)
-        return;
-    unregister_kprobe(kp);
-    synchronize_rcu();
-    kfree(kp);
-    *kp_ptr = NULL;
-}
-
-static struct kprobe *pts_kp = NULL;
-#endif
 
 void ksu_mark_running_process()
 {
@@ -330,10 +261,6 @@ void ksu_sucompat_enable()
     }
 #endif
 
-#ifdef CONFIG_KPROBES
-    // Register kprobe for pts_unix98_lookup
-    pts_kp = init_kprobe("pts_unix98_lookup", pts_unix98_lookup_pre);
-#endif
 }
 
 void ksu_sucompat_disable()
@@ -344,11 +271,6 @@ void ksu_sucompat_disable()
     unregister_trace_sys_enter(sucompat_sys_enter_handler, NULL);
     tracepoint_synchronize_unregister();
     pr_info("sucompat: sys_enter tracepoint unregistered\n");
-#endif
-
-#ifdef CONFIG_KPROBES
-    // Unregister pts_unix98_lookup kprobe
-    destroy_kprobe(&pts_kp);
 #endif
 }
 
