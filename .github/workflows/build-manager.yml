@@ -15,12 +15,8 @@ on:
   workflow_call:
 
 jobs:
-  build-lkm:
-    uses: ./.github/workflows/build-lkm.yml
-    secrets: inherit
 
   build-ksud:
-    needs: build-lkm
     strategy:
       matrix:
         include:
@@ -42,6 +38,7 @@ jobs:
     with:
       target: ${{ matrix.target }}
       os: ${{ matrix.os }}
+      pack_lkm: false
 
   build-manager:
     needs: build-ksud
