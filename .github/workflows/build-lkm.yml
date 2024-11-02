@@ -9,6 +9,7 @@ on:
     paths:
       - ".github/workflows/build-lkm.yml"
   workflow_call:
+  workflow_dispatch:
 jobs:
   build-lkm:
     strategy:
