@@ -85,7 +85,7 @@ setup_flashable() {
   $BOOTMODE && return
   if [ -z $OUTFD ] || readlink /proc/$$/fd/$OUTFD | grep -q /tmp; then
     # We will have to manually find out OUTFD
-    for FD in `ls /proc/$$/fd`; do
+    for FD in /proc/$$/fd/*; do
       if readlink /proc/$$/fd/$FD | grep -q pipe; then
         if ps | grep -v grep | grep -qE " 3 $FD |status_fd=$FD"; then
           OUTFD=$FD
@@ -302,18 +302,15 @@ is_legacy_script() {
 }
 
 handle_partition() {
-    # if /system/vendor is a symlink, we need to move it out of $MODPATH/system, otherwise it will be overlayed
-    # if /system/vendor is a normal directory, it is ok to overlay it and we don't need to overlay it separately.
-    if [ ! -e $MODPATH/system/$1 ]; then
+    PARTITION="$1"
+    if [ ! -e "$MODPATH/system/$PARTITION" ]; then
         # no partition found
         return;
     fi
 
-    if [ -L "/system/$1" ] && [ "$(readlink -f /system/$1)" = "/$1" ]; then
-        ui_print "- Handle partition /$1"
-        # we create a symlink if module want to access $MODPATH/system/$1
-        # but it doesn't always work(ie. write it in post-fs-data.sh would fail because it is readonly)
-        mv -f $MODPATH/system/$1 $MODPATH/$1 && ln -sf ../$1 $MODPATH/system/$1
+    if [ -L "/system/$PARTITION" ] && [ "$(readlink -f "/system/$PARTITION")" = "/$PARTITION" ]; then
+        ui_print "- Handle partition /$PARTITION"
+        ln -sf "$MODPATH/$PARTITION" "$MODPATH/system/$PARTITION"
     fi
 }
 
