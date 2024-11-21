@@ -161,17 +161,6 @@ enum Debug {
 
     Mount,
 
-    /// Copy sparse file
-    Xcp {
-        /// source file
-        src: String,
-        /// destination file
-        dst: String,
-        /// punch hole
-        #[arg(short, long, default_value = "false")]
-        punch_hole: bool,
-    },
-
     /// For testing
     Test,
 }
@@ -231,9 +220,6 @@ enum Module {
 
     /// list all modules
     List,
-
-    /// Shrink module image size
-    Shrink,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -313,7 +299,6 @@ pub fn run() -> Result<()> {
                 Module::Disable { id } => module::disable_module(&id),
                 Module::Action { id } => module::run_action(&id),
                 Module::List => module::list_modules(),
-                Module::Shrink => module::shrink_ksu_images(),
             }
         }
         Commands::Install { magiskboot } => utils::install(magiskboot),
@@ -347,15 +332,7 @@ pub fn run() -> Result<()> {
                 Ok(())
             }
             Debug::Su { global_mnt } => crate::su::grant_root(global_mnt),
-            Debug::Mount => init_event::mount_modules_systemlessly(defs::MODULE_DIR),
-            Debug::Xcp {
-                src,
-                dst,
-                punch_hole,
-            } => {
-                utils::copy_sparse_file(src, dst, punch_hole)?;
-                Ok(())
-            }
+            Debug::Mount => init_event::mount_modules_systemlessly(),
             Debug::Test => assets::ensure_binaries(false),
         },
 
