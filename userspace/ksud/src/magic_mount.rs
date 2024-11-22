@@ -1,5 +1,5 @@
 use crate::defs::{KSU_MOUNT_SOURCE, MODULE_DIR, SKIP_MOUNT_FILE_NAME, TEMP_DIR};
-use crate::magic_mount::NodeFileType::{Directory, RegularFile, Symlink};
+use crate::magic_mount::NodeFileType::{Directory, RegularFile, Symlink, Whiteout};
 use crate::restorecon::{lgetfilecon, lsetfilecon};
 use anyhow::{bail, Context, Result};
 use extattr::lgetxattr;
@@ -14,7 +14,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::{create_dir, create_dir_all, read_dir, DirEntry, FileType};
-use std::os::unix::fs::symlink;
+use std::os::unix::fs::{symlink, FileTypeExt};
 use std::path::{Path, PathBuf};
 
 const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
@@ -24,6 +24,7 @@ enum NodeFileType {
     RegularFile,
     Directory,
     Symlink,
+    Whiteout,
 }
 
 impl NodeFileType {
@@ -63,13 +64,9 @@ impl Node {
                 }
             }
 
-            let file_type = entry.file_type()?;
-
             let node = match self.children.entry(name.clone()) {
                 Entry::Occupied(o) => Some(o.into_mut()),
-                Entry::Vacant(v) => {
-                    Self::new_module(&name, file_type, &path).map(|it| v.insert(it))
-                }
+                Entry::Vacant(v) => Self::new_module(&name, &entry, &path).map(|it| v.insert(it)),
             };
 
             if let Some(node) = node {
@@ -96,18 +93,30 @@ impl Node {
 
     fn new_module<T: ToString, P: AsRef<Path>>(
         name: T,
-        file_type: FileType,
+        entry: &DirEntry,
         module_path: P,
     ) -> Option<Self> {
-        let file_type = NodeFileType::from_file_type(file_type)?;
+        if let Ok(metadata) = entry.metadata() {
+            let file_type = if metadata.file_type().is_char_device()
+                && metadata.dev() == 0
+                && metadata.ino() == 0
+            {
+                Some(Whiteout)
+            } else {
+                NodeFileType::from_file_type(metadata.file_type())
+            };
+            if let Some(file_type) = file_type {
+                return Some(Node {
+                    name: name.to_string(),
+                    file_type,
+                    children: Default::default(),
+                    module_path: Some(PathBuf::from(module_path.as_ref())),
+                    replace: false,
+                });
+            }
+        }
 
-        Some(Node {
-            name: name.to_string(),
-            file_type,
-            children: Default::default(),
-            module_path: Some(PathBuf::from(module_path.as_ref())),
-            replace: false,
-        })
+        None
     }
 }
 
@@ -251,13 +260,19 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
             if !has_tmpfs {
                 for (name, node) in &current.children {
                     let real_path = path.join(name);
-                    let need = if node.file_type == Symlink || !real_path.exists() {
-                        true
-                    } else {
-                        let file_type = real_path.metadata()?.file_type();
-                        let file_type =
-                            NodeFileType::from_file_type(file_type).unwrap_or(RegularFile);
-                        file_type != node.file_type || file_type == Symlink
+                    let need = match node.file_type {
+                        Symlink => true,
+                        Whiteout => real_path.exists(),
+                        _ => {
+                            if let Ok(metadata) = real_path.metadata() {
+                                let file_type = NodeFileType::from_file_type(metadata.file_type())
+                                    .unwrap_or(Whiteout);
+                                file_type != node.file_type || file_type == Symlink
+                            } else {
+                                // real path not exists
+                                true
+                            }
+                        }
                     };
                     if need {
                         create_tmpfs = need;
@@ -333,6 +348,7 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                 move_mount(&work_dir_path, &path)?;
             }
         }
+        Whiteout => {}
     }
 
     Ok(())
