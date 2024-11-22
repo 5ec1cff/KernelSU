@@ -346,7 +346,7 @@ handle_partition() {
 
     if [ -L "/system/$PARTITION" ] && [ "$(readlink -f "/system/$PARTITION")" = "/$PARTITION" ]; then
         ui_print "- Handle partition /$PARTITION"
-        ln -sf "$MODPATH/$PARTITION" "$MODPATH/system/$PARTITION"
+        ln -sf "$MODPATH/system/$PARTITION" "$MODPATH/$PARTITION"
     fi
 }
 
@@ -427,22 +427,22 @@ install_module() {
     [ -f $MODPATH/customize.sh ] && . $MODPATH/customize.sh
   fi
 
+  handle_partition vendor
+  handle_partition system_ext
+  handle_partition product
+  handle_partition odm
+
   # Handle replace folders
   for TARGET in $REPLACE; do
     ui_print "- Replace target: $TARGET"
-    mark_replace $MODPATH$TARGET
+    mark_replace "$MODPATH$TARGET"
   done
 
   # Handle remove files
   for TARGET in $REMOVE; do
     ui_print "- Remove target: $TARGET"
-    mark_remove $MODPATH$TARGET
+    mark_remove "$MODPATH$TARGET"
   done
-
-  handle_partition vendor
-  handle_partition system_ext
-  handle_partition product
-  handle_partition odm
 
   if $BOOTMODE; then
     mktouch $NVBASE/modules/$MODID/update
