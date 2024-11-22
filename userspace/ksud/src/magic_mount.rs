@@ -2,6 +2,7 @@ use crate::defs::{KSU_MOUNT_SOURCE, MODULE_DIR, SKIP_MOUNT_FILE_NAME, TEMP_DIR};
 use crate::magic_mount::NodeFileType::{Directory, RegularFile, Symlink};
 use crate::restorecon::{lgetfilecon, lsetfilecon};
 use anyhow::{bail, Context, Result};
+use extattr::lgetxattr;
 use rustix::fs::{
     bind_mount, chmod, chown, mount, move_mount, unmount, Gid, MetadataExt, Mode, MountFlags,
     MountPropagationFlags, Uid, UnmountFlags,
@@ -15,7 +16,6 @@ use std::fs;
 use std::fs::{create_dir, create_dir_all, read_dir, DirEntry, FileType};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
-use extattr::lgetxattr;
 
 const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
 
@@ -121,7 +121,8 @@ fn collect_module_files() -> Result<Option<Node>> {
             continue;
         }
 
-        if entry.path().join("disable").exists() || entry.path().join(SKIP_MOUNT_FILE_NAME).exists() {
+        if entry.path().join("disable").exists() || entry.path().join(SKIP_MOUNT_FILE_NAME).exists()
+        {
             continue;
         }
 
