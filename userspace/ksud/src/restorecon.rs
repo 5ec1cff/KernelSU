@@ -61,11 +61,11 @@ pub fn restore_syscon<P: AsRef<Path>>(dir: P) -> Result<()> {
     Ok(())
 }
 
-fn restore_syscon_if_unlabeled<P: AsRef<Path>>(dir: P) -> Result<()> {
+fn restore_modules_con<P: AsRef<Path>>(dir: P) -> Result<()> {
     for dir_entry in WalkDir::new(dir).parallelism(Serial) {
         if let Some(path) = dir_entry.ok().map(|dir_entry| dir_entry.path())
             && let anyhow::Result::Ok(con) = lgetfilecon(&path)
-            && (con == UNLABEL_CON || con.is_empty())
+            && (con == ADB_CON || con == UNLABEL_CON || con.is_empty())
         {
             lsetfilecon(&path, SYSTEM_CON)?;
         }
@@ -75,6 +75,6 @@ fn restore_syscon_if_unlabeled<P: AsRef<Path>>(dir: P) -> Result<()> {
 
 pub fn restorecon() -> Result<()> {
     lsetfilecon(defs::DAEMON_PATH, ADB_CON)?;
-    restore_syscon_if_unlabeled(defs::MODULE_DIR)?;
+    restore_modules_con(defs::MODULE_DIR)?;
     Ok(())
 }
