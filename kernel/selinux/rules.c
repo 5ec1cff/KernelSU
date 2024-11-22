@@ -79,10 +79,6 @@ void apply_kernelsu_rules()
 	ksu_allow(db, "init", "adb_data_file", "file", ALL);
 	ksu_allow(db, "init", "adb_data_file", "dir", ALL); // #1289
 	ksu_allow(db, "init", KERNEL_SU_DOMAIN, ALL, ALL);
-	// https://github.com/topjohnwu/Magisk/blob/c0899f2939a3b27a6173952f2b150b0eb04148c7/native/src/sepolicy/rules.rs#L133
-	// keep /data/adb/* context
-    ksu_deny(db, "init", "adb_data_file", "dir", "search");
-    ksu_deny(db, "vendor_init", "adb_data_file", "dir", "search");
 	// we need to umount modules in zygote
 	ksu_allow(db, "zygote", "adb_data_file", "dir", "search");
 
