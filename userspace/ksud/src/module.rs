@@ -19,7 +19,7 @@ use std::{
     fs::{remove_dir_all, remove_file, set_permissions, File, Permissions},
     io::Cursor,
     path::{Path, PathBuf},
-    process::{Command},
+    process::Command,
     str::FromStr,
 };
 use zip_extensions::zip_extract_file_to_memory;
