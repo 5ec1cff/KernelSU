@@ -284,7 +284,7 @@ pub fn handle_updated_modules() -> Result<()> {
                     log::error!("Failed to remove old {}: {}", old_dir.display(), e);
                 }
             }
-            if let Err(e) = rename(&module, &old_dir) {
+            if let Err(e) = rename(module, &old_dir) {
                 log::error!("Failed to move new module {}: {}", module.display(), e);
             }
         }
