@@ -41,6 +41,7 @@ impl NodeFileType {
     }
 }
 
+#[derive(Debug)]
 struct Node {
     name: String,
     file_type: NodeFileType,
@@ -56,22 +57,15 @@ impl Node {
         let mut has_file = false;
         for entry in dir.read_dir()?.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            let path = dir.join(&name);
-            if let Ok(v) = lgetxattr(&path, REPLACE_DIR_XATTR) {
-                if String::from_utf8_lossy(&v) == "y" {
-                    has_file = true;
-                    self.replace = true;
-                }
-            }
 
             let node = match self.children.entry(name.clone()) {
                 Entry::Occupied(o) => Some(o.into_mut()),
-                Entry::Vacant(v) => Self::new_module(&name, &entry, &path).map(|it| v.insert(it)),
+                Entry::Vacant(v) => Self::new_module(&name, &entry).map(|it| v.insert(it)),
             };
 
             if let Some(node) = node {
-                has_file |= if let Directory = node.file_type {
-                    node.collect_module_files(dir.join(&node.name))?
+                has_file |= if node.file_type == Directory {
+                    node.collect_module_files(dir.join(&node.name))? || node.replace
                 } else {
                     true
                 }
@@ -91,27 +85,29 @@ impl Node {
         }
     }
 
-    fn new_module<T: ToString, P: AsRef<Path>>(
-        name: T,
-        entry: &DirEntry,
-        module_path: P,
-    ) -> Option<Self> {
+    fn new_module<T: ToString>(name: T, entry: &DirEntry) -> Option<Self> {
         if let Ok(metadata) = entry.metadata() {
-            let file_type = if metadata.file_type().is_char_device()
-                && metadata.dev() == 0
-                && metadata.ino() == 0
-            {
+            let path = entry.path();
+            let file_type = if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
                 Some(Whiteout)
             } else {
                 NodeFileType::from_file_type(metadata.file_type())
             };
             if let Some(file_type) = file_type {
+                let mut replace = false;
+                if file_type == Directory {
+                    if let Ok(v) = lgetxattr(&path, REPLACE_DIR_XATTR) {
+                        if String::from_utf8_lossy(&v) == "y" {
+                            replace = true;
+                        }
+                    }
+                }
                 return Some(Node {
                     name: name.to_string(),
                     file_type,
                     children: Default::default(),
-                    module_path: Some(PathBuf::from(module_path.as_ref())),
-                    replace: false,
+                    module_path: Some(path),
+                    replace,
                 });
             }
         }
@@ -229,16 +225,19 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
     let work_dir_path = work_dir_path.as_ref().join(&current.name);
     match current.file_type {
         RegularFile => {
-            if has_tmpfs {
+            let target_path = if has_tmpfs {
                 fs::File::create(&work_dir_path)?;
-            }
+                &work_dir_path
+            } else {
+                &path
+            };
             if let Some(module_path) = &current.module_path {
                 log::debug!(
                     "mount module file {} -> {}",
                     module_path.display(),
                     work_dir_path.display()
                 );
-                bind_mount(module_path, &work_dir_path)?;
+                bind_mount(module_path, target_path)?;
             } else {
                 bail!("cannot mount root file {}!", path.display());
             }
@@ -256,8 +255,8 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
             }
         }
         Directory => {
-            let mut create_tmpfs = false;
-            if !has_tmpfs {
+            let mut create_tmpfs = current.replace;
+            if !has_tmpfs && !create_tmpfs {
                 for (name, node) in &current.children {
                     let real_path = path.join(name);
                     let need = match node.file_type {
@@ -275,7 +274,7 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                         }
                     };
                     if need {
-                        create_tmpfs = need;
+                        create_tmpfs = true;
                         break;
                     }
                 }
@@ -314,29 +313,53 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     path.display(),
                     work_dir_path.display()
                 );
-                bind_mount(&work_dir_path, &work_dir_path)?;
+                bind_mount(&work_dir_path, &work_dir_path).context("bind self")?;
             }
 
             if path.exists() && !current.replace {
                 for entry in path.read_dir()?.flatten() {
                     let name = entry.file_name().to_string_lossy().to_string();
-                    if let Some(node) = current.children.remove(&name) {
-                        do_magic_mount(&path, &work_dir_path, node, has_tmpfs)?;
+                    let result = if let Some(node) = current.children.remove(&name) {
+                        do_magic_mount(&path, &work_dir_path, node, has_tmpfs)
+                            .with_context(|| format!("magic mount {}/{name}", path.display()))
                     } else if has_tmpfs {
-                        mount_mirror(&path, &work_dir_path, &entry)?;
+                        mount_mirror(&path, &work_dir_path, &entry)
+                            .with_context(|| format!("mount mirror {}/{name}", path.display()))
+                    } else {
+                        Ok(())
+                    };
+
+                    if let Err(e) = result {
+                        if has_tmpfs {
+                            return Err(e);
+                        } else {
+                            log::error!("mount child {}/{name} failed: {}", path.display(), e);
+                        }
                     }
                 }
             }
 
-            if current.replace && current.module_path.is_none() {
-                bail!(
-                    "dir {} is declared as replaced but it is root!",
-                    path.display()
-                );
+            if current.replace {
+                if current.module_path.is_none() {
+                    bail!(
+                        "dir {} is declared as replaced but it is root!",
+                        path.display()
+                    );
+                } else {
+                    log::debug!("dir {} is replaced", path.display());
+                }
             }
 
-            for node in current.children.into_values() {
-                do_magic_mount(&path, &work_dir_path, node, has_tmpfs)?;
+            for (name, node) in current.children.into_iter() {
+                if let Err(e) = do_magic_mount(&path, &work_dir_path, node, has_tmpfs)
+                    .with_context(|| format!("magic mount {}/{name}", path.display()))
+                {
+                    if has_tmpfs {
+                        return Err(e);
+                    } else {
+                        log::error!("mount child {}/{name} failed: {}", path.display(), e);
+                    }
+                }
             }
 
             if create_tmpfs {
@@ -345,10 +368,13 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     work_dir_path.display(),
                     path.display()
                 );
-                move_mount(&work_dir_path, &path)?;
+                move_mount(&work_dir_path, &path).context("move self")?;
+                mount_change(&path, MountPropagationFlags::PRIVATE).context("make self private")?;
             }
         }
-        Whiteout => {}
+        Whiteout => {
+            log::debug!("file {} is removed", path.display());
+        }
     }
 
     Ok(())
@@ -356,6 +382,7 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
 
 pub fn magic_mount() -> Result<()> {
     if let Some(root) = collect_module_files()? {
+        log::debug!("collected: {:#?}", root);
         let tmp_dir = PathBuf::from(TEMP_DIR);
         mount(KSU_MOUNT_SOURCE, &tmp_dir, "tmpfs", MountFlags::empty(), "").context("mount tmp")?;
         mount_change(&tmp_dir, MountPropagationFlags::PRIVATE).context("make tmp private")?;
