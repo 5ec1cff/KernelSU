@@ -1,12 +1,13 @@
 use anyhow::{Ok, Result};
 use clap::Parser;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "android")]
 use android_logger::Config;
 #[cfg(target_os = "android")]
 use log::LevelFilter;
 
+use crate::defs::KSUD_VERBOSE_LOG_FILE;
 use crate::{apk_sign, assets, debug, defs, init_event, ksucalls, module, utils};
 
 /// KernelSU userspace cli
@@ -15,6 +16,9 @@ use crate::{apk_sign, assets, debug, defs, init_event, ksucalls, module, utils};
 struct Args {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(short, long, default_value_t = cfg!(debug_assertions))]
+    verbose: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -280,6 +284,10 @@ pub fn run() -> Result<()> {
     }
 
     let cli = Args::parse();
+
+    if !cli.verbose && !Path::new(KSUD_VERBOSE_LOG_FILE).exists() {
+        log::set_max_level(LevelFilter::Info);
+    }
 
     log::info!("command: {:?}", cli.command);
 
