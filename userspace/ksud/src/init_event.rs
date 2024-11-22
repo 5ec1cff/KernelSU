@@ -1,8 +1,5 @@
 use crate::module::{handle_updated_modules, prune_modules};
-use crate::{
-    assets, defs, ksucalls, restorecon,
-    utils::self,
-};
+use crate::{assets, defs, ksucalls, restorecon, utils};
 use anyhow::{Context, Result};
 use log::{info, warn};
 use std::path::Path;
