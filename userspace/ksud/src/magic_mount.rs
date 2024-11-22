@@ -15,6 +15,9 @@ use std::fs;
 use std::fs::{create_dir, create_dir_all, read_dir, DirEntry, FileType};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
+use extattr::lgetxattr;
+
+const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 enum NodeFileType {
@@ -52,10 +55,12 @@ impl Node {
         let mut has_file = false;
         for entry in dir.read_dir()?.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name == ".replace" {
-                has_file = true;
-                self.replace = true;
-                continue;
+            let path = dir.join(&name);
+            if let Ok(v) = lgetxattr(&path, REPLACE_DIR_XATTR) {
+                if String::from_utf8_lossy(&v) == "y" {
+                    has_file = true;
+                    self.replace = true;
+                }
             }
 
             let file_type = entry.file_type()?;
@@ -63,7 +68,7 @@ impl Node {
             let node = match self.children.entry(name.clone()) {
                 Entry::Occupied(o) => Some(o.into_mut()),
                 Entry::Vacant(v) => {
-                    Self::new_module(&name, file_type, dir.join(&name)).map(|it| v.insert(it))
+                    Self::new_module(&name, file_type, &path).map(|it| v.insert(it))
                 }
             };
 
