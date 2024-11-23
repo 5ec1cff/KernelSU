@@ -398,11 +398,11 @@ pub fn run_action(id: &str) -> Result<()> {
 }
 
 pub fn enable_module(id: &str) -> Result<()> {
-    mark_module_state(id, defs::DISABLE_FILE_NAME, true)
+    mark_module_state(id, defs::DISABLE_FILE_NAME, false)
 }
 
 pub fn disable_module(id: &str) -> Result<()> {
-    mark_module_state(id, defs::DISABLE_FILE_NAME, false)
+    mark_module_state(id, defs::DISABLE_FILE_NAME, true)
 }
 
 pub fn disable_all_modules() -> Result<()> {
