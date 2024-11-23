@@ -303,12 +303,13 @@ is_legacy_script() {
 
 handle_partition() {
     PARTITION="$1"
+    REQUIRE_SYMLINK="$2"
     if [ ! -e "$MODPATH/system/$PARTITION" ]; then
         # no partition found
         return;
     fi
 
-    if [ -L "/system/$PARTITION" ] && [ "$(readlink -f "/system/$PARTITION")" = "/$PARTITION" ]; then
+    if [ "$REQUIRE_SYMLINK" = "false" ] || [ -L "/system/$PARTITION" ] && [ "$(readlink -f "/system/$PARTITION")" = "/$PARTITION" ]; then
         ui_print "- Handle partition /$PARTITION"
         ln -sf "$MODPATH/system/$PARTITION" "$MODPATH/$PARTITION"
     fi
@@ -388,10 +389,10 @@ install_module() {
     [ -f $MODPATH/customize.sh ] && . $MODPATH/customize.sh
   fi
 
-  handle_partition vendor
-  handle_partition system_ext
-  handle_partition product
-  handle_partition odm
+  handle_partition vendor true
+  handle_partition system_ext true
+  handle_partition product true
+  handle_partition odm false
 
   # Handle replace folders
   for TARGET in $REPLACE; do
