@@ -148,10 +148,15 @@ fn collect_module_files() -> Result<Option<Node>> {
     }
 
     if has_file {
-        for partition in ["vendor", "system_ext", "product", "odm"] {
+        for (partition, require_symlink) in [
+            ("vendor", true),
+            ("system_ext", true),
+            ("product", true),
+            ("odm", false),
+        ] {
             let path_of_root = Path::new("/").join(partition);
             let path_of_system = Path::new("/system").join(partition);
-            if path_of_root.is_dir() && path_of_system.is_symlink() {
+            if path_of_root.is_dir() && (!require_symlink || path_of_system.is_symlink()) {
                 let name = partition.to_string();
                 if let Some(node) = system.children.remove(&name) {
                     root.children.insert(name, node);
