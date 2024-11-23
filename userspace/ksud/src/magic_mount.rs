@@ -15,7 +15,7 @@ use std::cmp::PartialEq;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs;
-use std::fs::{create_dir, create_dir_all, read_dir, DirEntry, FileType};
+use std::fs::{create_dir, create_dir_all, read_dir, read_link, DirEntry, FileType};
 use std::os::unix::fs::{symlink, FileTypeExt};
 use std::path::{Path, PathBuf};
 
@@ -171,8 +171,15 @@ fn collect_module_files() -> Result<Option<Node>> {
 }
 
 fn clone_symlink<Src: AsRef<Path>, Dst: AsRef<Path>>(src: Src, dst: Dst) -> Result<()> {
-    symlink(src.as_ref(), dst.as_ref())?;
+    let src_symlink = read_link(src.as_ref())?;
+    symlink(&src_symlink, dst.as_ref())?;
     lsetfilecon(dst.as_ref(), lgetfilecon(src.as_ref())?.as_str())?;
+    log::debug!(
+        "clone symlink {} -> {}({})",
+        dst.as_ref().display(),
+        dst.as_ref().display(),
+        src_symlink.display()
+    );
     Ok(())
 }
 
