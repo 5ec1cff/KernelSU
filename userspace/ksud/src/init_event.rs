@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use log::{info, warn};
 use std::path::Path;
+use rustix::fs::{mount, MountFlags};
 
 use crate::module::{handle_updated_modules, prune_modules};
 use crate::utils::is_safe_mode;
@@ -8,6 +9,8 @@ use crate::{
     assets, defs, ksucalls, restorecon,
     utils::{self, ensure_clean_dir},
 };
+
+use crate::defs::{KSU_MOUNT_SOURCE, TEMP_DIR};
 
 #[cfg(target_os = "android")]
 pub fn mount_modules_systemlessly() -> Result<()> {
@@ -87,6 +90,11 @@ pub fn on_post_data_fs() -> Result<()> {
         warn!("safe mode, skip load feature config");
     } else if let Err(e) = crate::feature::init_features() {
         warn!("init features failed: {e}");
+    }
+
+    // mount temp dir
+    if let Err(e) = mount(KSU_MOUNT_SOURCE, TEMP_DIR, "tmpfs", MountFlags::empty(), "") {
+        warn!("do temp dir mount failed: {}", e);
     }
 
     // exec modules post-fs-data scripts
