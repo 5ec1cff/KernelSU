@@ -1,5 +1,7 @@
+use crate::defs::{KSU_MOUNT_SOURCE, TEMP_DIR};
 use crate::module::{handle_updated_modules, prune_modules};
 use log::{info, warn};
+use rustix::fs::{mount, MountFlags};
 use std::path::Path;
 use crate::{
     assets, defs, ksucalls, restorecon,
@@ -83,6 +85,11 @@ pub fn on_post_data_fs() -> Result<()> {
     // load feature config
     if let Err(e) = crate::feature::init_features() {
         warn!("init features failed: {e}");
+    }
+
+    // mount temp dir
+    if let Err(e) = mount(KSU_MOUNT_SOURCE, TEMP_DIR, "tmpfs", MountFlags::empty(), "") {
+        warn!("do temp dir mount failed: {}", e);
     }
 
     // exec modules post-fs-data scripts
