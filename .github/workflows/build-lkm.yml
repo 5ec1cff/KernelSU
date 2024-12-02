@@ -42,3 +42,24 @@ jobs:
       tag: ${{ matrix.version }}-${{ matrix.os_patch_level }}
       os_patch_level: ${{ matrix.os_patch_level }}
       build_lkm: true
+
+  
+  push-to-branch:
+    needs: [build-lkm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all workflow run artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: bin/
+          merge-multiple: true
+      - name: Push to branch LKM
+        run: |
+          cd bin
+          git init
+          git remote add origin https://${{ github.actor }}:${{ secrets.TOKEN }}@github.com/${{ github.repository }}
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add *-lkm
+          git commit -m "Upload LKM"
+          git push --force --set-upstream origin lkm
