@@ -56,6 +56,7 @@ jobs:
       - name: Push to branch LKM
         run: |
           cd bin
+          git config --global init.defaultBranch lkm
           git init
           git remote add origin https://${{ github.actor }}:${{ secrets.TOKEN }}@github.com/${{ github.repository }}
           git config --local user.name "github-actions[bot]"
