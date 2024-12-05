@@ -14,7 +14,6 @@ on:
   workflow_call:
 
 jobs:
-
   build-ksud:
     strategy:
       matrix:
@@ -27,7 +26,7 @@ jobs:
     with:
       target: ${{ matrix.target }}
       os: ${{ matrix.os }}
-      pack_lkm: false
+      pack_lkm: true
 
   build-manager:
     needs: build-ksud
