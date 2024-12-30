@@ -91,7 +91,6 @@ import me.weishu.kernelsu.ui.component.rememberCustomDialog
 import me.weishu.kernelsu.ui.component.rememberLoadingDialog
 import me.weishu.kernelsu.ui.util.LocalSnackbarHost
 import me.weishu.kernelsu.ui.util.getBugreportFile
-import me.weishu.kernelsu.ui.util.shrinkModules
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -165,7 +164,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
             var umountChecked by rememberSaveable {
                 mutableStateOf(Natives.isDefaultUmountModules())
             }
-            
+
             KsuIsValid() {
                 SwitchItem(
                     icon = Icons.Filled.FolderDelete,
@@ -178,7 +177,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                     }
                 }
             }
-            
+
             KsuIsValid() {
                 if (Natives.version >= Natives.MINIMAL_SUPPORTED_SU_COMPAT) {
                     var isSuDisabled by rememberSaveable {
@@ -219,17 +218,16 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                     prefs.getBoolean("enable_web_debugging", false)
                 )
             }
-            
-            KsuIsValid() {
-                SwitchItem(
-                    icon = Icons.Filled.DeveloperMode,
-                    title = stringResource(id = R.string.enable_web_debugging),
-                    summary = stringResource(id = R.string.enable_web_debugging_summary),
-                    checked = enableWebDebugging
-                ) {
-                    prefs.edit().putBoolean("enable_web_debugging", it).apply()
-                    enableWebDebugging = it
-                }
+
+            // mksu-changed: `KsuIsValid` is not needed
+            SwitchItem(
+                icon = Icons.Filled.DeveloperMode,
+                title = stringResource(id = R.string.enable_web_debugging),
+                summary = stringResource(id = R.string.enable_web_debugging_summary),
+                checked = enableWebDebugging
+            ) {
+                prefs.edit().putBoolean("enable_web_debugging", it).apply()
+                enableWebDebugging = it
             }
 
             var showBottomsheet by remember { mutableStateOf(false) }
@@ -334,30 +332,6 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                                             )
                                         }
                                     )
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-
-            val shrink = stringResource(id = R.string.shrink_sparse_image)
-            val shrinkMessage = stringResource(id = R.string.shrink_sparse_image_message)
-            KsuIsValid() {
-                ListItem(
-                    leadingContent = {
-                        Icon(
-                            Icons.Filled.Compress,
-                            shrink
-                        )
-                    },
-                    headlineContent = { Text(shrink) },
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            val result = shrinkDialog.awaitConfirm(title = shrink, content = shrinkMessage)
-                            if (result == ConfirmResult.Confirmed) {
-                                loadingDialog.withLoading {
-                                    shrinkModules()
                                 }
                             }
                         }
