@@ -90,8 +90,8 @@
     <string name="select_file">Wybierz plik</string>
     <string name="install_inactive_slot">Zainstaluj do nieaktywnego slotu (po aktualizcji OTA)</string>
     <string name="install_inactive_slot_warning">Po ponownym uruchomieniu Twoje urządzenie zostanie **ZMUSZONE** do uruchomia się z obecnie nieaktywnego slotu!
-\nUżyj tej opcji dopiero po zakończeniu aktualizacji OTA.
-\nCzy chcesz kontynuować?</string>
+        \nUżyj tej opcji dopiero po zakończeniu aktualizacji OTA.
+        \nCzy chcesz kontynuować?</string>
     <string name="app_profile_template_create">Stwórz szablon</string>
     <string name="app_profile_template_edit">Edytuj szablon</string>
     <string name="app_profile_template_name">Nazwa</string>
@@ -118,8 +118,6 @@
     <string name="module_changelog_failed">Pobranie dziennika zmian nie powiodło się: %s</string>
     <string name="settings_check_update">Wyszukaj aktualizacje</string>
     <string name="settings_check_update_summary">Wyszukuj aktualizacje automatycznie przy otwieraniu aplikacji.</string>
-    <string name="shrink_sparse_image">Minimalizuj rozrzedzony (sparse) obraz</string>
-    <string name="shrink_sparse_image_message">Zmienia rozmiar obrazu rozrzedzonego(sparse), w którym znajduje się moduł, do jego rzeczywistego rozmiaru. Należy pamiętać, że może to spowodować nieprawidłowe działanie modułu, więc należy go używać tylko wtedy, gdy jest to konieczne (np. do tworzenia kopii zapasowych).</string>
     <string name="settings_uninstall_permanent">Odinstaluj zupełnie</string>
     <string name="settings_restore_stock_image">Przywróć obraz fabryczny</string>
     <string name="settings_uninstall_temporary">Odinstaluj tymczasowo</string>

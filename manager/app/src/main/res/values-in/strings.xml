@@ -108,8 +108,8 @@
     <string name="select_kmi">Pilih KMI</string>
     <string name="install_next">Selanjutnya</string>
     <string name="install_inactive_slot_warning">Gawai akan **DIPAKSA** untuk but ke slot nonaktif!
-\nHANYA gunakan setelah proses OTA selesai.
-\nLanjutkan?</string>
+        \nHANYA gunakan setelah proses OTA selesai.
+        \nLanjutkan?</string>
     <string name="direct_install">Instal langsung (rekomendasi)</string>
     <string name="select_file">Pilih berkas</string>
     <string name="install_inactive_slot">Instal ke slot nonaktif (setelah OTA)</string>
@@ -117,8 +117,6 @@
     <string name="open">Buka</string>
     <string name="settings_check_update">Periksa pembaruan</string>
     <string name="settings_check_update_summary">Periksa pembaruan secara otomatis saat membuka aplikasi.</string>
-    <string name="shrink_sparse_image">Minimalkan ukuran sparse image</string>
-    <string name="shrink_sparse_image_message">Ubah ukuran image yang jarang (sparse image) di mana modul tersebut berada menjadi ukuran aslinya. Perlu diperhatikan bahwa hal ini dapat menyebabkan modul berfungsi secara tidak normal, jadi harap hanya gunakan jika diperlukan (seperti untuk cadangan).</string>
     <string name="settings_uninstall_permanent_message">Menghapus KernelSU (root dan semua modul) secara lengkap dan permanen.</string>
     <string name="settings_uninstall_temporary">Hapus sementara</string>
     <string name="settings_restore_stock_image">Pulihkan image bawaan</string>
