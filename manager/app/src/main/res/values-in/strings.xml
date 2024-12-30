@@ -117,8 +117,6 @@
     <string name="open">Buka</string>
     <string name="settings_check_update">Cek terbaru</string>
     <string name="settings_check_update_summary">Cek terbaru setiap membuka aplikasi</string>
-    <string name="shrink_sparse_image">Minimalkan ukuran sparse image</string>
-    <string name="shrink_sparse_image_message">Mengembalikan ukuran sparse image, lokasi modul disimpan, ke ukuran sebenarnya. Dapat menyebabkan modul bekerja abnormal, gunakan saat dibutuhkan saja (mis. untuk pencadangan).</string>
     <string name="settings_uninstall_permanent_message">Hapus permanen KernelSU (root dan modul).</string>
     <string name="settings_uninstall_temporary">Hapus sementara</string>
     <string name="settings_restore_stock_image">Pulihkan image bawaan</string>
