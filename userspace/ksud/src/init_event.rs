@@ -10,7 +10,7 @@ use crate::{
     utils::{self, ensure_clean_dir},
 };
 
-use crate::defs::{KSU_MOUNT_SOURCE, TEMP_DIR};
+use crate::defs::{KSU_MOUNT_SOURCE, NO_MOUNT_PATH, NO_TMPFS_PATH, TEMP_DIR};
 
 #[cfg(target_os = "android")]
 pub fn mount_modules_systemlessly() -> Result<()> {
@@ -40,8 +40,6 @@ pub fn on_post_data_fs() -> Result<()> {
     let safe_mode = crate::utils::is_safe_mode();
 
     if safe_mode {
-        // we should still mount modules.img to `/data/adb/modules` in safe mode
-        // becuase we may need to operate the module dir in safe mode
         warn!("safe mode, skip common post-fs-data.d scripts");
     } else {
         // Then exec common post-fs-data scripts
@@ -93,8 +91,12 @@ pub fn on_post_data_fs() -> Result<()> {
     }
 
     // mount temp dir
-    if let Err(e) = mount(KSU_MOUNT_SOURCE, TEMP_DIR, "tmpfs", MountFlags::empty(), "") {
-        warn!("do temp dir mount failed: {}", e);
+    if !Path::new(NO_TMPFS_PATH).exists() {
+        if let Err(e) = mount(KSU_MOUNT_SOURCE, TEMP_DIR, "tmpfs", MountFlags::empty(), "") {
+            warn!("do temp dir mount failed: {}", e);
+        }
+    } else {
+        info!("no tmpfs requested");
     }
 
     // exec modules post-fs-data scripts
@@ -109,8 +111,12 @@ pub fn on_post_data_fs() -> Result<()> {
     }
 
     // mount module systemlessly by magic mount
-    if let Err(e) = mount_modules_systemlessly() {
-        warn!("do systemless mount failed: {e}");
+    if !Path::new(NO_MOUNT_PATH).exists() {
+        if let Err(e) = mount_modules_systemlessly() {
+            warn!("do systemless mount failed: {e}");
+        }
+    } else {
+        info!("no mount requested");
     }
 
     run_stage("post-mount", true);
