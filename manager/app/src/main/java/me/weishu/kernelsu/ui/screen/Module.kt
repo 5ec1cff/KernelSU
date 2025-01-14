@@ -534,7 +534,8 @@ fun ModuleItem(
     ElevatedCard(
         modifier = Modifier.fillMaxWidth()
     ) {
-        val textDecoration = if (!module.remove) null else TextDecoration.LineThrough
+        val isUninstall = !module.remove
+        val textDecoration = if (isUninstall) null else TextDecoration.LineThrough
         val interactionSource = remember { MutableInteractionSource() }
         val indication = LocalIndication.current
         val viewModel = viewModel<ModuleViewModel>()
@@ -545,6 +546,7 @@ fun ModuleItem(
                     if (module.hasWebUi) {
                         toggleable(
                             value = module.enabled,
+                            enabled = isUninstall && module.enabled,
                             interactionSource = interactionSource,
                             role = Role.Button,
                             indication = indication,
@@ -599,7 +601,7 @@ fun ModuleItem(
                     horizontalArrangement = Arrangement.End,
                 ) {
                     Switch(
-                        enabled = !module.update,
+                        enabled = isUninstall,
                         checked = module.enabled,
                         onCheckedChange = onCheckChanged,
                         interactionSource = if (!module.hasWebUi) interactionSource else null
@@ -634,6 +636,7 @@ fun ModuleItem(
                 if (module.hasActionScript) {
                     FilledTonalButton(
                         modifier = Modifier.defaultMinSize(52.dp, 32.dp),
+                        enabled = isUninstall && module.enabled,
                         onClick = {
                             navigator.navigate(ExecuteModuleActionScreenDestination(module.dirId))
                             viewModel.markNeedRefresh()
@@ -661,6 +664,7 @@ fun ModuleItem(
                 if (module.hasWebUi) {
                     FilledTonalButton(
                         modifier = Modifier.defaultMinSize(52.dp, 32.dp),
+                        enabled = isUninstall && module.enabled,
                         onClick = { onClick(module) },
                         interactionSource = interactionSource,
                         contentPadding = ButtonDefaults.TextButtonContentPadding
@@ -686,6 +690,7 @@ fun ModuleItem(
                 if (updateUrl.isNotEmpty()) {
                     Button(
                         modifier = Modifier.defaultMinSize(52.dp, 32.dp),
+                        enabled = isUninstall,
                         onClick = { onUpdate(module) },
                         shape = ButtonDefaults.textShape,
                         contentPadding = ButtonDefaults.TextButtonContentPadding
@@ -713,7 +718,7 @@ fun ModuleItem(
                     onClick = { onUninstallClicked(module) },
                     contentPadding = ButtonDefaults.TextButtonContentPadding
                 ) {
-                    if (!module.remove) {
+                    if (isUninstall) {
                         Icon(
                             modifier = Modifier.size(20.dp),
                             imageVector = Icons.Outlined.Delete,
@@ -731,7 +736,7 @@ fun ModuleItem(
                             modifier = Modifier.padding(start = 7.dp),
                             fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
                             fontSize = MaterialTheme.typography.labelMedium.fontSize,
-                            text = stringResource(if (!module.remove) R.string.uninstall else R.string.restore)
+                            text = stringResource(if (isUninstall) R.string.uninstall else R.string.restore)
                         )
                     }
                 }
