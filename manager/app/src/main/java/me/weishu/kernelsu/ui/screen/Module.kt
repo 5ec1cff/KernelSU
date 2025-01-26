@@ -275,7 +275,7 @@ fun ModulePager(
 
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
-                uninstallModule(module.id)
+                uninstallModule(module.dirId)
             }
         }
 
@@ -293,7 +293,7 @@ fun ModulePager(
     suspend fun onModuleToggle(module: ModuleViewModel.ModuleInfo) {
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
-                toggleModule(module.id, !module.enabled)
+                toggleModule(module.dirId, !module.enabled)
             }
         }
         if (success) {
@@ -545,7 +545,7 @@ fun ModulePager(
                         }
                         val onExecuteActionClick = remember(module.id, navigator, viewModel) {
                             {
-                                navigator.navigate(ExecuteModuleActionScreenDestination(currentModuleState.value.id)) {
+                                navigator.navigate(ExecuteModuleActionScreenDestination(currentModuleState.value.dirId)) {
                                     launchSingleTop = true
                                 }
                                 viewModel.markNeedRefresh()
@@ -554,7 +554,7 @@ fun ModulePager(
                         val onOpenWebUiClick = remember(module.id) {
                             {
                                 onModuleClick(
-                                    currentModuleState.value.id,
+                                    currentModuleState.value.dirId,
                                     currentModuleState.value.name,
                                     currentModuleState.value.hasWebUi
                                 )
@@ -782,7 +782,7 @@ private fun ModuleList(
                         val onOpenWebUiClick = remember(module.id, onClickModule) {
                             {
                                 onClickModule(
-                                    currentModuleState.value.id,
+                                    currentModuleState.value.dirId,
                                     currentModuleState.value.name,
                                     currentModuleState.value.hasWebUi
                                 )
