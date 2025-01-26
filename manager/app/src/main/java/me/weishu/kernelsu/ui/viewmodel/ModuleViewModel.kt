@@ -50,6 +50,7 @@ class ModuleViewModel : ViewModel() {
         val updateJson: String,
         val hasWebUi: Boolean,
         val hasActionScript: Boolean,
+        val dirId: String, // real module id (dir name)
     )
 
     @Immutable
@@ -181,7 +182,8 @@ class ModuleViewModel : ViewModel() {
                             obj.getBoolean("remove"),
                             obj.optString("updateJson"),
                             obj.optBoolean("web"),
-                            obj.optBoolean("action")
+                            obj.optBoolean("action"),
+                            obj.getString("dir_id"),
                         )
                     }.toList()
                 syncModuleUpdateInfo(modules)
