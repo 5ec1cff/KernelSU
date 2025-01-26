@@ -24,6 +24,7 @@
     <string name="module_sort_action_first">排序（可执行优先）</string>
     <string name="module_sort_enabled_first">排序（已启用优先）</string>
     <string name="uninstall">卸载</string>
+    <string name="restore">还原</string>
     <string name="module_install">安装</string>
     <string name="install">安装</string>
     <string name="reboot">重启</string>
