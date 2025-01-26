@@ -147,6 +147,13 @@ fun uninstallModule(id: String): Boolean {
     return result
 }
 
+fun restoreModule(id: String): Boolean {
+    val cmd = "module restore $id"
+    val result = execKsud(cmd, true)
+    Log.i(TAG, "restore module $id result: $result")
+    return result
+}
+
 private fun flashWithIO(
     cmd: String,
     onStdout: (String) -> Unit,

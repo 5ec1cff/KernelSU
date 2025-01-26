@@ -45,6 +45,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Download
@@ -63,6 +64,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -102,6 +104,7 @@ import me.weishu.kernelsu.ui.util.DownloadListener
 import me.weishu.kernelsu.ui.util.download
 import me.weishu.kernelsu.ui.util.getFileName
 import me.weishu.kernelsu.ui.util.hasMagisk
+import me.weishu.kernelsu.ui.util.restoreModule
 import me.weishu.kernelsu.ui.util.toggleModule
 import me.weishu.kernelsu.ui.util.uninstallModule
 import me.weishu.kernelsu.ui.viewmodel.ModuleViewModel
@@ -263,26 +266,33 @@ fun ModulePager(
         }
     }
 
-    suspend fun onModuleUninstall(module: ModuleViewModel.ModuleInfo) {
-        val confirmResult = confirmDialog.awaitConfirm(
-            moduleStr,
-            content = moduleUninstallConfirm.format(module.name),
-            confirm = uninstall,
-            dismiss = cancel
-        )
-        if (confirmResult != ConfirmResult.Confirmed) {
-            return
+    suspend fun onModuleUninstallClicked(module: ModuleViewModel.ModuleInfo) {
+        val isUninstall = !module.remove
+        if (isUninstall) {
+            val confirmResult = confirmDialog.awaitConfirm(
+                moduleStr,
+                content = moduleUninstallConfirm.format(module.name),
+                confirm = uninstall,
+                dismiss = cancel
+            )
+            if (confirmResult != ConfirmResult.Confirmed) {
+                return
+            }
         }
 
         val success = loadingDialog.withLoading {
-            withContext(Dispatchers.IO) {
+            if (isUninstall) {
                 uninstallModule(module.dirId)
+            } else {
+                restoreModule(module.dirId)
             }
         }
 
         if (success) {
             viewModel.fetchModuleList()
         }
+        if (!isUninstall) return
+
         val message = if (success) {
             successUninstall.format(module.name)
         } else {
@@ -502,10 +512,10 @@ fun ModulePager(
                         val currentModuleState = rememberUpdatedState(module)
                         val moduleUpdateInfo = updateInfoMap[module.id] ?: ModuleViewModel.ModuleUpdateInfo.Empty
 
-                        val onUninstallClick = remember(module.id, itemScope, ::onModuleUninstall) {
+                        val onUninstallClick = remember(module.id, itemScope, ::onModuleUninstallClicked) {
                             {
                                 itemScope.launch {
-                                    onModuleUninstall(currentModuleState.value)
+                                    onModuleUninstallClicked(currentModuleState.value)
                                 }
                                 Unit
                             }
@@ -617,8 +627,8 @@ fun ModulePager(
                         onClickModule = { id, name, hasWebUi ->
                             onModuleClick(id, name, hasWebUi)
                         },
-                        onModuleUninstall = { module ->
-                            onModuleUninstall(module)
+                        onModuleUninstallClicked = { module ->
+                            onModuleUninstallClicked(module)
                         },
                         onModuleToggle = { module ->
                             onModuleToggle(module)
@@ -656,7 +666,7 @@ private fun ModuleList(
     modules: List<ModuleViewModel.ModuleInfo>,
     onInstallModule: (Uri) -> Unit,
     onClickModule: (id: String, name: String, hasWebUi: Boolean) -> Unit,
-    onModuleUninstall: suspend (ModuleViewModel.ModuleInfo) -> Unit,
+    onModuleUninstallClicked: suspend (ModuleViewModel.ModuleInfo) -> Unit,
     onModuleToggle: suspend (ModuleViewModel.ModuleInfo) -> Unit,
     onModuleUpdate: suspend (ModuleViewModel.ModuleInfo, String, String, String) -> Unit,
     context: Context,
@@ -735,10 +745,10 @@ private fun ModuleList(
                         val currentModuleState = rememberUpdatedState(module)
                         val moduleUpdateInfo = updateInfoMap[module.id] ?: ModuleViewModel.ModuleUpdateInfo.Empty
 
-                        val onUninstallClick = remember(module.id, scope, onModuleUninstall) {
+                        val onUninstallClick = remember(module.id, scope, onModuleUninstallClicked) {
                             {
                                 scope.launch {
-                                    onModuleUninstall(currentModuleState.value)
+                                    onModuleUninstallClicked(currentModuleState.value)
                                 }
                                 Unit
                             }
@@ -983,8 +993,8 @@ fun ModuleItem(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        modifier = Modifier.size(20.dp),
-                        imageVector = Icons.Outlined.Delete,
+                        modifier = Modifier.size(20.dp).apply { if (module.remove) rotate(180f) },
+                        imageVector = if (!module.remove) Icons.Outlined.Delete else Icons.Outlined.Refresh,
                         tint = actionIconTint,
                         contentDescription = null
                     )
