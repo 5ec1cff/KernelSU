@@ -394,6 +394,10 @@ pub fn uninstall_module(id: &str) -> Result<()> {
     mark_module_state(id, defs::REMOVE_FILE_NAME, true)
 }
 
+pub fn restore_uninstall_module(id: &str) -> Result<()> {
+    mark_module_state(id, defs::REMOVE_FILE_NAME, false)
+}
+
 pub fn run_action(id: &str) -> Result<()> {
     let action_script_path = format!("/data/adb/modules/{id}/action.sh");
     exec_script(&action_script_path, true)
@@ -446,7 +450,7 @@ pub fn read_module_prop(module_path: &Path) -> Result<HashMap<String, String>> {
             prop_map.insert(k, v);
         })
         .with_context(|| format!("Failed to parse module.prop: {}", module_prop.display()))?;
-
+        
     Ok(prop_map)
 }
 
@@ -475,18 +479,13 @@ fn _list_modules(path: &str) -> Vec<HashMap<String, String>> {
             }
         };
 
+        let dir_id = entry.file_name().to_string_lossy().to_string();
+        module_prop_map.insert("dir_id".to_owned(), dir_id.clone());
+
         // If id is missing or empty, use directory name as fallback
         if !module_prop_map.contains_key("id") || module_prop_map["id"].is_empty() {
-            match entry.file_name().to_str() {
-                Some(id) => {
-                    info!("Use dir name as module id: {id}");
-                    module_prop_map.insert("id".to_owned(), id.to_owned());
-                }
-                _ => {
-                    info!("Failed to get module id from dir name");
-                    continue;
-                }
-            }
+            info!("Use dir name as module id: {dir_id}");
+            module_prop_map.insert("id".to_owned(), dir_id.clone());
         }
 
         // Add enabled, update, remove flags
