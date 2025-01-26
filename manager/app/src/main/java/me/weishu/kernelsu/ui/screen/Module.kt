@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -69,6 +70,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -101,6 +103,7 @@ import me.weishu.kernelsu.ui.util.LocalSnackbarHost
 import me.weishu.kernelsu.ui.util.download
 import me.weishu.kernelsu.ui.util.hasMagisk
 import me.weishu.kernelsu.ui.util.reboot
+import me.weishu.kernelsu.ui.util.restoreModule
 import me.weishu.kernelsu.ui.util.toggleModule
 import me.weishu.kernelsu.ui.util.uninstallModule
 import me.weishu.kernelsu.ui.viewmodel.ModuleViewModel
@@ -370,26 +373,34 @@ private fun ModuleList(
         }
     }
 
-    suspend fun onModuleUninstall(module: ModuleViewModel.ModuleInfo) {
-        val confirmResult = confirmDialog.awaitConfirm(
-            moduleStr,
-            content = moduleUninstallConfirm.format(module.name),
-            confirm = uninstall,
-            dismiss = cancel
-        )
-        if (confirmResult != ConfirmResult.Confirmed) {
-            return
+    suspend fun onModuleUninstallClicked(module: ModuleViewModel.ModuleInfo) {
+        val isUninstall = !module.remove
+        if (isUninstall) {
+            val confirmResult = confirmDialog.awaitConfirm(
+                moduleStr,
+                content = moduleUninstallConfirm.format(module.name),
+                confirm = uninstall,
+                dismiss = cancel
+            )
+            if (confirmResult != ConfirmResult.Confirmed) {
+                return
+            }
         }
 
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
-                uninstallModule(module.dirId)
+                if (isUninstall) {
+                    uninstallModule(module.dirId)
+                } else {
+                    restoreModule(module.dirId)
+                }
             }
         }
 
         if (success) {
             viewModel.fetchModuleList()
         }
+        if (!isUninstall) return
         val message = if (success) {
             successUninstall.format(module.name)
         } else {
@@ -456,8 +467,8 @@ private fun ModuleList(
                             navigator = navigator,
                             module = module,
                             updateUrl = updatedModule.first,
-                            onUninstall = {
-                                scope.launch { onModuleUninstall(module) }
+                            onUninstallClicked = {
+                                scope.launch { onModuleUninstallClicked(module) }
                             },
                             onCheckChanged = {
                                 scope.launch {
@@ -515,7 +526,7 @@ fun ModuleItem(
     navigator: DestinationsNavigator,
     module: ModuleViewModel.ModuleInfo,
     updateUrl: String,
-    onUninstall: (ModuleViewModel.ModuleInfo) -> Unit,
+    onUninstallClicked: (ModuleViewModel.ModuleInfo) -> Unit,
     onCheckChanged: (Boolean) -> Unit,
     onUpdate: (ModuleViewModel.ModuleInfo) -> Unit,
     onClick: (ModuleViewModel.ModuleInfo) -> Unit
@@ -703,21 +714,28 @@ fun ModuleItem(
 
                 FilledTonalButton(
                     modifier = Modifier.defaultMinSize(52.dp, 32.dp),
-                    enabled = !module.remove,
-                    onClick = { onUninstall(module) },
+                    onClick = { onUninstallClicked(module) },
                     contentPadding = ButtonDefaults.TextButtonContentPadding
                 ) {
-                    Icon(
-                        modifier = Modifier.size(20.dp),
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = null
-                    )
+                    if (!module.remove) {
+                        Icon(
+                            modifier = Modifier.size(20.dp),
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null,
+                        )
+                    } else {
+                        Icon(
+                            modifier = Modifier.size(20.dp).rotate(180f),
+                            imageVector = Icons.Outlined.Refresh,
+                            contentDescription = null,
+                        )
+                    }
                     if (!module.hasActionScript && !module.hasWebUi && updateUrl.isEmpty()) {
                         Text(
                             modifier = Modifier.padding(start = 7.dp),
                             fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
                             fontSize = MaterialTheme.typography.labelMedium.fontSize,
-                            text = stringResource(R.string.uninstall)
+                            text = stringResource(if (!module.remove) R.string.uninstall else R.string.restore)
                         )
                     }
                 }

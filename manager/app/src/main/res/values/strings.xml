@@ -26,6 +26,7 @@
     <string name="module_sort_action_first">Sort (Action first)</string>
     <string name="module_sort_enabled_first">Sort (Enabled first)</string>
     <string name="uninstall">Uninstall</string>
+    <string name="restore">Restore</string>
     <string name="module_install">Install</string>
     <string name="install">Install</string>
     <string name="reboot">Reboot</string>
