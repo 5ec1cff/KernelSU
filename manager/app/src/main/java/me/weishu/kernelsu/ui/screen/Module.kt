@@ -411,7 +411,7 @@ private fun ModuleList(
 
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
-                uninstallModule(module.id)
+                uninstallModule(module.dirId)
             }
         }
 
@@ -491,7 +491,7 @@ private fun ModuleList(
                                 scope.launch {
                                     val success = loadingDialog.withLoading {
                                         withContext(Dispatchers.IO) {
-                                            toggleModule(module.id, !module.enabled)
+                                            toggleModule(module.dirId, !module.enabled)
                                         }
                                     }
                                     if (success) {
@@ -522,7 +522,7 @@ private fun ModuleList(
                                 }
                             },
                             onClick = {
-                                onClickModule(it.id, it.name, it.hasWebUi)
+                                onClickModule(it.dirId, it.name, it.hasWebUi)
                             }
                         )
 
@@ -654,7 +654,7 @@ fun ModuleItem(
                         modifier = Modifier.defaultMinSize(52.dp, 32.dp),
                         enabled = !module.remove && module.enabled,
                         onClick = {
-                            navigator.navigate(ExecuteModuleActionScreenDestination(module.id))
+                            navigator.navigate(ExecuteModuleActionScreenDestination(module.dirId))
                             viewModel.markNeedRefresh()
                         },
                         contentPadding = ButtonDefaults.TextButtonContentPadding
@@ -769,7 +769,8 @@ fun ModuleItemPreview() {
         remove = false,
         updateJson = "",
         hasWebUi = false,
-        hasActionScript = false
+        hasActionScript = false,
+        dirId = "dirId"
     )
     ModuleItem(EmptyDestinationsNavigator, module, "", {}, {}, {}, {})
 }
