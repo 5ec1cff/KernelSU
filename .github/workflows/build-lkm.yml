@@ -1,17 +1,23 @@
 name: Build LKM for KernelSU
 on:
-  push:
-    branches: ["main", "ci", "checkci"]
-    paths:
-      - ".github/workflows/build-lkm.yml"
-      - 'kernel/**'
-  pull_request:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/build-lkm.yml"
-      - 'kernel/**'
   workflow_call:
+    inputs:
+      upload:
+        required: false
+        type: boolean
+        default: false
+        description: "Whether to upload to branch"
+    secrets:
+      # username:github_pat
+      TOKEN:
+        required: true
   workflow_dispatch:
+    inputs:
+      upload:
+        required: false
+        type: boolean
+        default: false
+        description: "Whether to upload to branch"
 jobs:
   build-lkm:
     strategy:
@@ -35,6 +41,7 @@ jobs:
           - version: "android15-6.6"
             sub_level: 87
             os_patch_level: 2025-05
+    # uses: ./.github/workflows/gki-kernel-mock.yml when debugging
     uses: ./.github/workflows/gki-kernel.yml
     with:
       version: ${{ matrix.version }}
@@ -43,10 +50,10 @@ jobs:
       os_patch_level: ${{ matrix.os_patch_level }}
       build_lkm: true
 
-  
   push-to-branch:
     needs: [build-lkm]
     runs-on: ubuntu-latest
+    if: ${{ inputs.upload }}
     steps:
       - name: Download all workflow run artifacts
         uses: actions/download-artifact@v4
@@ -58,10 +65,10 @@ jobs:
           cd bin
           git config --global init.defaultBranch lkm
           git init
-          git remote add origin https://${{ github.actor }}:${{ secrets.TOKEN }}@github.com/${{ github.repository }}
+          git remote add origin https://${{ secrets.TOKEN }}@github.com/${{ github.repository }}
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           find . -type f
           git add .
-          git commit -m "Upload LKM"
+          git commit -m "Upload LKM from ${{ github.sha }}" -m "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           git push --force --set-upstream origin lkm
