@@ -21,8 +21,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - sub_level: 209
-            os_patch_level: 2024-11
+          - sub_level: 168
+            os_patch_level: 2023-11
           - sub_level: 218
             os_patch_level: 2024-08
           - sub_level: 136
@@ -113,6 +113,6 @@ jobs:
     with:
       version: android12-5.10
       version_name: android12-5.10.136
-      tag: android12-5.10-2024-11
+      tag: android12-5.10-2022-11
       os_patch_level: 2024-11
       patch_path: "5.10"
