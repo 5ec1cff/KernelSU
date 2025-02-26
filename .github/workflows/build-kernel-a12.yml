@@ -1,14 +1,14 @@
 name: Build Kernel - Android 12
-on:
+于:
   push:
-    branches: ["main", "ci", "checkci"]
+    分支: ["main"， "ci"， "checkci"]
     paths:
       - ".github/workflows/build-kernel-a12.yml"
       - ".github/workflows/gki-kernel.yml"
       - ".github/scripts/build_a12.sh"
       - "kernel/**"
   pull_request:
-    branches: ["main"]
+    分支: ["main"]
     paths:
       - ".github/workflows/build-kernel-a12.yml"
       - ".github/workflows/gki-kernel.yml"
@@ -21,8 +21,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - sub_level: 209
-            os_patch_level: 2024-05
+          - sub_level: 136
+            os_patch_level: 2022-11
           - sub_level: 218
             os_patch_level: 2024-08
           - sub_level: 226
