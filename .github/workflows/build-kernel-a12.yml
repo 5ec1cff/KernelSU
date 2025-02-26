@@ -1,7 +1,7 @@
 name: Build Kernel - Android 12
 于:
   push:
-    分支: ["main"， "dev"， "checkci"]
+    分支: ["main"]
     paths:
       - ".github/workflows/build-kernel-a12.yml"
       - ".github/workflows/gki-kernel.yml"
