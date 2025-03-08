@@ -1,7 +1,7 @@
 use crate::defs::{KSU_MOUNT_SOURCE, NO_MOUNT_PATH, NO_TMPFS_PATH, TEMP_DIR};
 use crate::module::{handle_updated_modules, prune_modules};
 use log::{info, warn};
-use rustix::fs::{mount, MountFlags};
+use rustix::fs::{MountFlags, mount};
 use std::path::Path;
 use crate::{
     assets, defs, ksucalls, restorecon,
