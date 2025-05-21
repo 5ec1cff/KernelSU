@@ -1,6 +1,7 @@
 package me.weishu.kernelsu.ui.viewmodel
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
@@ -28,6 +29,7 @@ import java.text.Collator
 import java.util.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import androidx.core.content.edit
 
 class SuperUserViewModel : ViewModel() {
 
@@ -63,10 +65,18 @@ class SuperUserViewModel : ViewModel() {
             }
     }
 
+    private val prefs = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)!!
+
     var search by mutableStateOf("")
-    var showSystemApps by mutableStateOf(false)
+    var showSystemApps by mutableStateOf(prefs.getBoolean("show_system_apps", false))
+        private set
     var isRefreshing by mutableStateOf(false)
         private set
+
+    fun updateShowSystemApps(newValue: Boolean) {
+        showSystemApps = newValue
+        prefs.edit { putBoolean("show_system_apps", newValue) }
+    }
 
     private val sortedList by derivedStateOf {
         val comparator = compareBy<AppInfo> {
