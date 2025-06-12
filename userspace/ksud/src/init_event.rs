@@ -69,7 +69,13 @@ pub fn on_post_data_fs() -> Result<()> {
 
     // mount temp dir
     if !Path::new(NO_TMPFS_PATH).exists() {
-        if let Err(e) = mount(KSU_MOUNT_SOURCE, utils::get_tmp_path(), "tmpfs", MountFlags::empty(), "") {
+        if let Err(e) = mount(
+            KSU_MOUNT_SOURCE,
+            utils::get_tmp_path(),
+            "tmpfs",
+            MountFlags::empty(),
+            "",
+        ) {
             warn!("do temp dir mount failed: {}", e);
         }
     } else {
