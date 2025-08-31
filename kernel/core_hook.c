@@ -246,6 +246,12 @@ static void nuke_ext4_sysfs() {
 	path_put(&path);
 }
 
+struct mount_entry {
+    char *umountable;
+    struct list_head list;
+};
+LIST_HEAD(mount_list);
+
 int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 		     unsigned long arg4, unsigned long arg5)
 {
@@ -276,6 +282,46 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 #ifdef CONFIG_KSU_DEBUG
 	pr_info("option: 0x%x, cmd: %ld\n", option, arg2);
 #endif
+
+	#define CMD_ADD_TRY_UMOUNT 10001 // change me later
+	if (arg2 == CMD_ADD_TRY_UMOUNT) {
+		struct mount_entry *new_entry, *entry;
+		char buf[384];
+		memzero_explicit(buf, 384); // overkill, init as empty is ok
+
+		if (copy_from_user(buf, (const char __user *)arg3, sizeof(buf) - 1)) {
+			pr_err("cmd_add_try_umount: failed to copy user string\n");
+			return 0;
+		}
+		buf[384 - 1] = '\0';
+		
+		new_entry = kmalloc(sizeof(*new_entry), GFP_KERNEL);
+		if (!new_entry)
+			return 0;
+		
+		new_entry->umountable = kstrdup(buf, GFP_KERNEL);
+		if (!new_entry->umountable) {
+			kfree(new_entry);
+			return 0;
+		}
+
+		// disallow dupes
+		// if this gets too many, we can consider moving this whole task to a kthread
+		list_for_each_entry(entry, &mount_list, list) {
+			if (!strcmp(entry->umountable, buf)) {
+				pr_info("cmd_add_try_umount: %s is already here!\n", buf);
+				return 0;
+			}	
+		}	
+		
+		pr_info("cmd_add_try_umount: %s added!\n", buf);
+		list_add(&new_entry->list, &mount_list);
+
+		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+			pr_err("prctl reply error, cmd: %lu\n", arg2);
+		}
+		return 0;
+	}
 
 	if (arg2 == CMD_BECOME_MANAGER) {
 		if (from_manager) {
@@ -538,9 +584,7 @@ static bool should_umount(struct path *path)
 static void ksu_umount_mnt(struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-	if (err) {
-		pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
-	}
+	pr_info("umount %s ret: %d\n", path->dentry->d_iname, err);
 }
 
 static void try_umount(const char *mnt, bool check_mnt, int flags)
@@ -568,6 +612,8 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
 {
+	struct mount_entry *entry, *tmp;
+
 	// this hook is used for umounting overlayfs for some uid, if there isn't any module mounted, just ignore it!
 	if (!ksu_module_mounted) {
 		return 0;
@@ -612,23 +658,15 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 			current->pid);
 		return 0;
 	}
-#ifdef CONFIG_KSU_DEBUG
+
 	// umount the target mnt
 	pr_info("handle umount for uid: %d, pid: %d\n", new_uid.val,
 		current->pid);
-#endif
 
-	// fixme: use `collect_mounts` and `iterate_mount` to iterate all mountpoint and
-	// filter the mountpoint whose target is `/data/adb`
-	try_umount("/odm", true, 0);
-	try_umount("/system", true, 0);
-	try_umount("/vendor", true, 0);
-	try_umount("/product", true, 0);
-	try_umount("/system_ext", true, 0);
-	try_umount("/data/adb/modules", false, MNT_DETACH);
-
-	// try umount ksu temp path
-	try_umount("/debug_ramdisk", false, MNT_DETACH);
+	// don't free! keep on heap! this is used on subsequent setuid calls
+	// if this is freed, we dont have anything to umount next
+	list_for_each_entry_safe(entry, tmp, &mount_list, list)
+		try_umount(entry->umountable, false, MNT_DETACH);
 
 	return 0;
 }
