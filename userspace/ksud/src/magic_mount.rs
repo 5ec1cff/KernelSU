@@ -260,7 +260,7 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                 bind_mount(module_path, target_path)?;
 		if let Ok(c_target_path) = CString::new(target_path.to_string_lossy().as_ref()) {  
 		    unsafe {  
-			prctl(0xDEADBEEF as c_long, 10001, c_target_path.as_ptr(), 0, 0);
+			prctl(0xDEADBEEFu32 as i32, 10001, c_target_path.as_ptr(), 0, 0);
 		    }
 		}
             } else {
