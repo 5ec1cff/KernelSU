@@ -313,7 +313,7 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 			}	
 		}	
 		
-		pr_info("cmd_add_try_umount: %s added!\n", buf);
+		pr_info("cmd_add_try_umount: %s added!\n", buf); // guard me with KSU_DEBUG!
 		list_add(&new_entry->list, &mount_list);
 
 		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
@@ -580,6 +580,7 @@ static void try_umount(const char *mnt, int flags)
 		return;
 	}
 
+	pr_info("%s: path: %s \n", __func__, mnt); // remove me!
 	if (path.dentry != path.mnt->mnt_root) {
 		// it is not root mountpoint, maybe umounted by others already.
 		path_put(&path);
