@@ -25,6 +25,8 @@
 #define CMD_ENABLE_SU 15
 #define CMD_GET_MANAGER_UID 16
 
+#define CMD_ADD_TRY_UMOUNT 10001 // maybe change, i dunno
+
 #define EVENT_POST_FS_DATA 1
 #define EVENT_BOOT_COMPLETED 2
 #define EVENT_MODULE_MOUNTED 3
