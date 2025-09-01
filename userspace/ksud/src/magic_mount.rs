@@ -258,10 +258,11 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     work_dir_path.display()
                 );
                 bind_mount(module_path, target_path)?;
-		if let Ok(c_target_path) = CString::new(target_path.to_string_lossy().as_ref()) {  
-		    unsafe {  
-			prctl(0xDEADBEEFu32 as i32, 10001, c_target_path.as_ptr(), 0, 0);
-		    }
+		if let Ok(c_target_path) = CString::new(target_path.to_string_lossy().as_ref()) {
+			let mut dummy: u32 = 0; // provide dummy pointer
+			unsafe {  
+				prctl(0xDEADBEEFu32 as i32, 10001, c_target_path.as_ptr(), &mut dummy as *mut u32 as *mut libc::c_void, &mut dummy as *mut u32 as *mut libc::c_void);
+			}
 		}
             } else {
                 bail!("cannot mount root file {}!", path.display());
