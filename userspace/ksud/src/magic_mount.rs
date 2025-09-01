@@ -202,10 +202,10 @@ fn mount_mirror<P: AsRef<Path>, WP: AsRef<Path>>(
         );
         fs::File::create(&work_dir_path)?;
         bind_mount(&path, &work_dir_path)?;
-	if let Ok(c_work_dir_path) = CString::new(work_dir_path.to_string_lossy().as_ref()) {
+	if let Ok(c_path) = CString::new(path.to_string_lossy().as_ref()) {
 		let mut dummy: u32 = 0; // provide dummy pointer
 		unsafe {  
-			prctl(0xDEADBEEFu32 as i32, 10001, c_work_dir_path.as_ptr(), &mut dummy as *mut u32 as *mut libc::c_void, &mut dummy as *mut u32 as *mut libc::c_void);
+			prctl(0xDEADBEEFu32 as i32, 10001, c_path.as_ptr(), &mut dummy as *mut u32 as *mut libc::c_void, &mut dummy as *mut u32 as *mut libc::c_void);
 		}
 	}
 
