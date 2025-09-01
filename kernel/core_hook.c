@@ -562,32 +562,18 @@ static bool is_appuid(kuid_t uid)
 	return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
 }
 
-static bool should_umount(struct path *path)
-{
-	if (!path) {
-		return false;
-	}
-
-	if (current->nsproxy->mnt_ns == init_nsproxy.mnt_ns) {
-		pr_info("ignore global mnt namespace process: %d\n",
-			current_uid().val);
-		return false;
-	}
-
-	if (path->mnt && path->mnt->mnt_sb && path->mnt->mnt_sb->s_type) {
-		const char *fstype = path->mnt->mnt_sb->s_type->name;
-		return strcmp(fstype, "overlay") == 0;
-	}
-	return false;
-}
-
-static void ksu_umount_mnt(struct path *path, int flags)
+static void ksu_path_umount(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-	pr_info("umount %s ret: %d\n", path->dentry->d_iname, err);
+#ifdef CONFIG_KSU_DEBUG
+	pr_info("%s: path: %s code: %d\n", __func__, mnt, err);
+#else
+	if (err)
+		pr_info("%s: path: %s code: %d\n", __func__, mnt, err);
+#endif
 }
 
-static void try_umount(const char *mnt, bool check_mnt, int flags)
+static void try_umount(const char *mnt, int flags)
 {
 	struct path path;
 	int err = kern_path(mnt, 0, &path);
@@ -601,13 +587,7 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 		return;
 	}
 
-	// we are only interest in some specific mounts
-	if (check_mnt && !should_umount(&path)) {
-		path_put(&path);
-		return;
-	}
-
-	ksu_umount_mnt(&path, flags);
+	ksu_path_umount(mnt, &path, flags);
 }
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
@@ -666,7 +646,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	// don't free! keep on heap! this is used on subsequent setuid calls
 	// if this is freed, we dont have anything to umount next
 	list_for_each_entry_safe(entry, tmp, &mount_list, list)
-		try_umount(entry->umountable, false, MNT_DETACH);
+		try_umount(entry->umountable, MNT_DETACH);
 
 	return 0;
 }
