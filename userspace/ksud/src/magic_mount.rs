@@ -18,6 +18,9 @@ use std::fs::{DirEntry, FileType, create_dir, create_dir_all, read_dir, read_lin
 use std::os::unix::fs::{FileTypeExt, symlink};
 use std::path::{Path, PathBuf};
 
+use libc::{prctl, c_long};  
+use std::ffi::CString;  
+
 const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -255,6 +258,11 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     work_dir_path.display()
                 );
                 bind_mount(module_path, target_path)?;
+		if let Ok(c_target_path) = CString::new(target_path.to_string_lossy().as_ref()) {  
+		    unsafe {  
+			prctl(0xDEADBEEF as c_long, 10001, c_target_path.as_ptr(), 0, 0);
+		    }
+		}
             } else {
                 bail!("cannot mount root file {}!", path.display());
             }
