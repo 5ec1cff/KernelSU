@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use extattr::lgetxattr;
 use rustix::fs::{
     Gid, MetadataExt, Mode, MountFlags, MountPropagationFlags, Uid, UnmountFlags, bind_mount,
-    chmod, chown, mount, move_mount, unmount,
+    chmod, chown, mount, move_mount, unmount, remount,
 };
 use rustix::mount::mount_change;
 use rustix::path::Arg;
@@ -254,7 +254,12 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     module_path.display(),
                     work_dir_path.display()
                 );
-                bind_mount(module_path, target_path)?;
+                bind_mount(module_path, target_path)
+                    .with_context(|| format!("mount module file {module_path:?} -> {work_dir_path:?}"))?;
+                // we should use MS_REMOUNT | MS_BIND | MS_xxx to change mount flags
+                if let Err(e) = remount(target_path, MountFlags::RDONLY | MountFlags::BIND, "") {
+                    log::warn!("make file {target_path:?} ro: {e:#?}");
+                }
             } else {
                 bail!("cannot mount root file {}!", path.display());
             }
@@ -266,7 +271,8 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     module_path.display(),
                     work_dir_path.display()
                 );
-                clone_symlink(module_path, &work_dir_path)?;
+                clone_symlink(module_path, &work_dir_path)
+                    .with_context(|| format!("create module symlink {module_path:?} -> {work_dir_path:?}"))?;
             } else {
                 bail!("cannot mount root symlink {}!", path.display());
             }
@@ -339,7 +345,8 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     path.display(),
                     work_dir_path.display()
                 );
-                bind_mount(&work_dir_path, &work_dir_path).context("bind self")?;
+                bind_mount(&work_dir_path, &work_dir_path).context("bind self")
+                    .with_context(|| format!("creating tmpfs for {path:?} at {work_dir_path:?}"))?;
             }
 
             if path.exists() && !current.replace {
@@ -362,7 +369,7 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                         if has_tmpfs {
                             return Err(e);
                         } else {
-                            log::error!("mount child {}/{name} failed: {}", path.display(), e);
+                            log::error!("mount child {}/{name} failed: {e:#?}", path.display());
                         }
                     }
                 }
@@ -389,7 +396,7 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     if has_tmpfs {
                         return Err(e);
                     } else {
-                        log::error!("mount child {}/{name} failed: {}", path.display(), e);
+                        log::error!("mount child {}/{name} failed: {e:#?}", path.display());
                     }
                 }
             }
@@ -400,8 +407,15 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                     work_dir_path.display(),
                     path.display()
                 );
-                move_mount(&work_dir_path, &path).context("move self")?;
-                mount_change(&path, MountPropagationFlags::PRIVATE).context("make self private")?;
+                if let Err(e) = remount(&work_dir_path, MountFlags::RDONLY | MountFlags::BIND, "") {
+                    log::warn!("make dir {path:?} ro: {e:#?}");
+                }
+                move_mount(&work_dir_path, &path).context("move self")
+                    .with_context(|| format!("moving tmpfs {work_dir_path:?} -> {path:?}"))?;
+                // make private to reduce peer group count
+                if let Err(e) = mount_change(&path, MountPropagationFlags::PRIVATE) {
+                    log::warn!("make dir {path:?} private: {e:#?}");
+                }
             }
         }
         Whiteout => {
