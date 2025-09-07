@@ -1,13 +1,10 @@
 use crate::defs::{KSU_MOUNT_SOURCE, NO_MOUNT_PATH, NO_TMPFS_PATH};
 use crate::module::{handle_updated_modules, prune_modules};
+use crate::{assets, defs, ksucalls, restorecon, utils};
+use anyhow::{Context, Result};
 use log::{info, warn};
 use rustix::fs::{MountFlags, mount};
 use std::path::Path;
-use crate::{
-    assets, defs, ksucalls, restorecon,
-    utils::self,
-};
-use anyhow::{Context, Result};
 
 #[cfg(target_os = "android")]
 pub fn mount_modules_systemlessly() -> Result<()> {
