@@ -450,7 +450,7 @@ pub fn read_module_prop(module_path: &Path) -> Result<HashMap<String, String>> {
             prop_map.insert(k, v);
         })
         .with_context(|| format!("Failed to parse module.prop: {}", module_prop.display()))?;
-        
+
     Ok(prop_map)
 }
 
