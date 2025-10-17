@@ -187,15 +187,20 @@ fn is_ok_empty(dir: &str) -> bool {
 }
 
 pub fn get_tmp_path() -> String {
-    let dirs = ["/debug_ramdisk", "/patch_hw", "/oem", "/root", "/sbin"];
-
-    // find empty directory
-    for dir in dirs {
-        if is_ok_empty(dir) {
-            return dir.to_string();
+    use std::sync::OnceLock;
+    static TMP_PATH_CACHE: OnceLock<String> = OnceLock::new();
+    TMP_PATH_CACHE.get_or_init(|| {
+        let dirs = ["/debug_ramdisk", "/patch_hw", "/oem", "/root", "/sbin"];
+        for dir in dirs {
+            if is_ok_empty(dir) {
+                let tmp_path = dir.to_string();
+                log::info!("tmp path: {}", tmp_path);
+                return tmp_path;
+            }
         }
-    }
-    "".to_string()
+        log::error!("failed to find available tmp path");
+        "".to_string()
+    }).clone()
 }
 
 pub fn get_work_dir() -> String {
