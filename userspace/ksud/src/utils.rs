@@ -186,26 +186,16 @@ fn is_ok_empty(dir: &str) -> bool {
     }
 }
 
-pub fn get_tmp_path() -> String {
-    use std::sync::OnceLock;
-    static TMP_PATH_CACHE: OnceLock<String> = OnceLock::new();
-    TMP_PATH_CACHE.get_or_init(|| {
-        let dirs = ["/debug_ramdisk", "/patch_hw", "/oem", "/root", "/sbin"];
-        for dir in dirs {
-            if is_ok_empty(dir) {
-                let tmp_path = dir.to_string();
-                log::info!("tmp path: {}", tmp_path);
-                return tmp_path;
-            }
-        }
-        log::error!("failed to find available tmp path");
-        "".to_string()
-    }).clone()
-}
+pub fn find_tmp_path() -> String {
+    let dirs = ["/debug_ramdisk", "/patch_hw", "/oem", "/root", "/sbin"];
 
-pub fn get_work_dir() -> String {
-    let tmp_path = get_tmp_path();
-    format!("{}/workdir/", tmp_path)
+    // find empty directory
+    for dir in dirs {
+        if is_ok_empty(dir) {
+            return dir.to_string();
+        }
+    }
+    "".to_string()
 }
 
 #[cfg(target_os = "android")]
