@@ -74,6 +74,9 @@ pub fn root_shell() -> Result<()> {
     // we are root now, this was set in kernel!
 
     use anyhow::anyhow;
+    use std::ffi::{CStr, CString};
+    use std::str;
+
     let env_args: Vec<String> = env::args().collect();
     let program = env_args[0].clone();
     let args = env_args
@@ -266,6 +269,26 @@ pub fn root_shell() -> Result<()> {
             }
 
             set_identity(uid, gid, &groups);
+
+            // why is the rust representation of a 10-line c code like this on rs ??
+            use libc::{syscall, SYS_ioctl, SYS_readlinkat, SYS_setxattr, TCGETS};
+            let mut t = unsafe { std::mem::zeroed::<libc::termios>() };
+            let ioctl_result = unsafe {
+                syscall(SYS_ioctl, 0, TCGETS, &mut t)
+            };
+            
+            if ioctl_result == 0 {
+                let mut pts = vec![0u8; 64];
+                let ps = unsafe { syscall(SYS_readlinkat, libc::AT_FDCWD, CString::new("/proc/self/fd/0").unwrap().as_ptr(), pts.as_mut_ptr() as *mut libc::c_char, pts.len() as libc::c_ulong) };
+                
+                if ps != -1 {
+                    pts[ps as usize] = 0;
+                    let pts_path = str::from_utf8(&pts[..ps as usize]).unwrap_or_default();
+                    let ctx = CString::new("u:object_r:devpts:s0").unwrap();
+
+                    unsafe { syscall(SYS_setxattr, pts_path.as_ptr() as *const libc::c_char, CString::new("security.selinux").unwrap().as_ptr(), ctx.as_ptr() as *const libc::c_char, ctx.to_bytes().len() as libc::c_ulong, 0); }
+                }
+            }
 
             Result::Ok(())
         })
