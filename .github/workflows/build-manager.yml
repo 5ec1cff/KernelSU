@@ -13,7 +13,12 @@ on:
   pull_request:
     branches: [ "main", "dev" ]
     paths:
+      - '.github/workflows/build-manager.yml'
+      - '.github/workflows/build-lkm.yml'
       - 'manager/**'
+      - 'kernel/**'
+      - 'userspace/ksud/**'
+      - 'scripts/ksubot.py'
   workflow_call:
 
 jobs:
