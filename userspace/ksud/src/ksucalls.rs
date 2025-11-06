@@ -231,10 +231,7 @@ pub fn set_feature(feature_id: u32, value: u64) -> std::io::Result<()> {
 }
 
 pub fn get_wrapped_fd(fd: RawFd) -> std::io::Result<RawFd> {
-    let mut cmd = GetWrapperFdCmd {
-        fd,
-        flags: 0,
-    };
+    let mut cmd = GetWrapperFdCmd { fd, flags: 0 };
     let result = ksuctl(KSU_IOCTL_GET_WRAPPER_FD, &mut cmd as *mut _)?;
     Ok(result)
 }

@@ -1,26 +1,26 @@
-use anyhow::{bail, Context, Ok, Result};
-use getopts::Options;
-use std::env;
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
-use std::{ffi::CStr, process::Command};
-use std::fs::File;
-use libc::c_int;
-use log::{debug, error, info};
-use procfs::process::FDTarget::Path;
 use crate::{
     defs,
     utils::{self, umask},
 };
+use anyhow::{Context, Ok, Result, bail};
+use getopts::Options;
+use libc::c_int;
+use log::{debug, error, info};
+use procfs::process::FDTarget::Path;
+use std::env;
+use std::fs::File;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::{ffi::CStr, process::Command};
 
+use crate::defs::NO_FD_WRAPPER_PATH;
+use crate::ksucalls::get_wrapped_fd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::{
     process::getuid,
     thread::{Gid, Uid, set_thread_res_gid, set_thread_res_uid},
 };
-use crate::defs::NO_FD_WRAPPER_PATH;
-use crate::ksucalls::get_wrapped_fd;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn grant_root(global_mnt: bool) -> Result<()> {
@@ -78,7 +78,9 @@ fn wrap_tty(fd: c_int) {
         }
         let new_fd = get_wrapped_fd(fd).context("get_wrapped_fd")?;
         if unsafe { libc::dup2(new_fd, fd) } == -1 {
-            bail!("dup {new_fd} -> {fd} errno: {}", unsafe { *libc::__errno() });
+            bail!("dup {new_fd} -> {fd} errno: {}", unsafe {
+                *libc::__errno()
+            });
         } else {
             unsafe { libc::close(new_fd) };
             Ok(())
@@ -195,7 +197,8 @@ pub fn root_shell() -> Result<()> {
     let mut is_login = matches.opt_present("l");
     let preserve_env = matches.opt_present("p");
     let mount_master = matches.opt_present("M");
-    let use_fd_wrapper = (!std::path::Path::new(NO_FD_WRAPPER_PATH).exists() || matches.opt_present("w"))
+    let use_fd_wrapper = (!std::path::Path::new(NO_FD_WRAPPER_PATH).exists()
+        || matches.opt_present("w"))
         && !matches.opt_present("W");
 
     info!("use_fd_wrapper={use_fd_wrapper}");
