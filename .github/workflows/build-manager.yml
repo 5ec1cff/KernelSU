@@ -11,6 +11,7 @@ on:
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/**'
+      - 'scripts/ksubot.py'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
