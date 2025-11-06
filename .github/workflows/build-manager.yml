@@ -17,6 +17,7 @@ on:
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/ksud/**'
+      - 'scripts/ksubot.py'
   workflow_call:
 
 jobs:
