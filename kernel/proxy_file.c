@@ -58,18 +58,29 @@ static ssize_t mksu_proxy_write_iter (struct kiocb *iocb, struct iov_iter *iovi)
 	return orig->f_op->write_iter(iocb, iovi);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+static int mksu_proxy_iopoll(struct kiocb *kiocb, struct io_comp_batch* icb, unsigned int v) {
+	struct ksu_file_proxy_data* data = kiocb->ki_filp->private_data;
+	struct file* orig = data->orig;
+	kiocb->ki_filp = orig;
+	return orig->f_op->iopoll(kiocb, icb, v);
+}
+#else
 static int mksu_proxy_iopoll(struct kiocb *kiocb, bool spin) {
 	struct ksu_file_proxy_data* data = kiocb->ki_filp->private_data;
 	struct file* orig = data->orig;
 	kiocb->ki_filp = orig;
 	return orig->f_op->iopoll(kiocb, spin);
 }
+#endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 static int mksu_proxy_iterate (struct file *fp, struct dir_context *dc) {
 	struct ksu_file_proxy_data* data = fp->private_data;
 	struct file* orig = data->orig;
 	return orig->f_op->iterate(orig, dc);
 }
+#endif
 
 static int mksu_proxy_iterate_shared (struct file *fp, struct dir_context *dc) {
 	struct ksu_file_proxy_data* data = fp->private_data;
@@ -135,6 +146,8 @@ static int mksu_proxy_lock(struct file *fp, int arg1, struct file_lock *fl) {
 	return orig->f_op->lock(orig, arg1, fl);
 }
 
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 static ssize_t mksu_proxy_sendpage (struct file *fp, struct page *pg, int arg1, size_t sz, loff_t *off, int arg2) {
 	struct ksu_file_proxy_data* data = fp->private_data;
 	struct file* orig = data->orig;
@@ -143,6 +156,7 @@ static ssize_t mksu_proxy_sendpage (struct file *fp, struct page *pg, int arg1, 
 	}
 	return -EINVAL;
 }
+#endif
 
 static unsigned long mksu_proxy_get_unmapped_area(struct file *fp, unsigned long arg1, unsigned long arg2, unsigned long arg3, unsigned long arg4) {
 	struct ksu_file_proxy_data* data = fp->private_data;
@@ -182,6 +196,35 @@ static ssize_t mksu_proxy_splice_read(struct file *fp, loff_t *off, struct pipe_
 	return -EINVAL;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+void mksu_proxy_splice_eof(struct file *fp) {
+	struct ksu_file_proxy_data* data = fp->private_data;
+	struct file* orig = data->orig;
+	if (orig->f_op->splice_eof) {
+		return orig->f_op->splice_eof(orig);
+	}
+}
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+static int mksu_proxy_setlease(struct file *fp, int arg1, struct file_lease **fl, void **p) {
+	struct ksu_file_proxy_data* data = fp->private_data;
+	struct file* orig = data->orig;
+	if (orig->f_op->setlease) {
+		return orig->f_op->setlease(orig, arg1, fl, p);
+	}
+	return -EINVAL;
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+static int mksu_proxy_setlease(struct file *fp, int arg1, struct file_lock **fl, void **p) {
+	struct ksu_file_proxy_data* data = fp->private_data;
+	struct file* orig = data->orig;
+	if (orig->f_op->setlease) {
+		return orig->f_op->setlease(orig, arg1, fl, p);
+	}
+	return -EINVAL;
+}
+#else
 static int mksu_proxy_setlease(struct file *fp, long arg1, struct file_lock **fl, void **p) {
 	struct ksu_file_proxy_data* data = fp->private_data;
 	struct file* orig = data->orig;
@@ -190,6 +233,7 @@ static int mksu_proxy_setlease(struct file *fp, long arg1, struct file_lock **fl
 	}
 	return -EINVAL;
 }
+#endif
 
 static long mksu_proxy_fallocate(struct file *fp, int mode, loff_t offset, loff_t len) {
 	struct ksu_file_proxy_data* data = fp->private_data;
@@ -247,7 +291,7 @@ static int mksu_proxy_release(struct inode *inode, struct file *filp) {
 }
 
 struct ksu_file_proxy_data* ksu_make_proxy(struct file* fp) {
-	struct ksu_file_proxy_data* p = kmalloc(sizeof(struct ksu_file_proxy_data), GFP_KERNEL);
+	struct ksu_file_proxy_data* p = kcalloc(sizeof(struct ksu_file_proxy_data), 1, GFP_KERNEL);
 	if (!p) {
 		return NULL;
 	}
@@ -262,20 +306,28 @@ struct ksu_file_proxy_data* ksu_make_proxy(struct file* fp) {
 	p->ops.read_iter = fp->f_op->read_iter ? mksu_proxy_read_iter : NULL;
 	p->ops.write_iter = fp->f_op->write_iter ? mksu_proxy_write_iter : NULL;
 	p->ops.iopoll = fp->f_op->iopoll ? mksu_proxy_iopoll : NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 	p->ops.iterate = fp->f_op->iterate ? mksu_proxy_iterate : NULL;
+#endif
 	p->ops.iterate_shared = fp->f_op->iterate_shared ? mksu_proxy_iterate_shared : NULL;
 	p->ops.poll = fp->f_op->poll ? mksu_proxy_poll : NULL;
 	p->ops.unlocked_ioctl = fp->f_op->unlocked_ioctl ? mksu_proxy_unlocked_ioctl : NULL;
 	p->ops.compat_ioctl = fp->f_op->compat_ioctl ? mksu_proxy_compat_ioctl : NULL;
 	p->ops.mmap = fp->f_op->mmap ? mksu_proxy_mmap : NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+	p->ops.fop_flags = fp->f_op->fop_flags;
+#else
 	p->ops.mmap_supported_flags = fp->f_op->mmap_supported_flags;
+#endif
 	p->ops.open = fp->f_op->open ? mksu_proxy_open : NULL;
 	p->ops.flush = fp->f_op->flush ? mksu_proxy_flush : NULL;
 	p->ops.release = mksu_proxy_release;
 	p->ops.fsync = fp->f_op->fsync ? mksu_proxy_fsync : NULL;
 	p->ops.fasync = fp->f_op->fasync ? mksu_proxy_fasync : NULL;
 	p->ops.lock = fp->f_op->lock ? mksu_proxy_lock : NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 	p->ops.sendpage = fp->f_op->sendpage ? mksu_proxy_sendpage : NULL;
+#endif
 	p->ops.get_unmapped_area = fp->f_op->get_unmapped_area ? mksu_proxy_get_unmapped_area : NULL;
 	p->ops.check_flags = fp->f_op->check_flags;
 	p->ops.flock = fp->f_op->flock ? mksu_proxy_flock : NULL;
@@ -287,6 +339,10 @@ struct ksu_file_proxy_data* ksu_make_proxy(struct file* fp) {
 	p->ops.copy_file_range = fp->f_op->copy_file_range ? mksu_proxy_copy_file_range : NULL;
 	p->ops.remap_file_range = fp->f_op->remap_file_range ? mksu_proxy_remap_file_range : NULL;
 	p->ops.fadvise = fp->f_op->fadvise ? mksu_proxy_fadvise : NULL;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	p->ops.splice_eof = fp->f_op->splice_eof ? mksu_proxy_splice_eof : NULL;
+#endif
 
 	return p;
 }
