@@ -3,6 +3,7 @@ import os
 import sys
 from telethon import TelegramClient
 import json
+import re
 
 API_ID = 611335
 API_HASH = "d524b414d21f4d37f08684c1df41ac9c"
@@ -18,27 +19,46 @@ RUN_URL = os.environ.get("RUN_URL")
 
 GITHUB_EVENT = json.loads(os.environ.get("GITHUB_EVENT"))
 
-if 'commits' in GITHUB_EVENT:
-    commits = GITHUB_EVENT['commits']
-    commit_message = ''
-    i = len(commits)
-    for commit in commits[::-1]:
-        msg = commit['message']
+commit_message = ''
+commit_line = ''
+upstream_diff = None
+try:
+    if 'commits' in GITHUB_EVENT:
+        commits = GITHUB_EVENT['commits']
+        commit_message = ''
+        i = len(commits)
+        for commit in commits[::-1]:
+            msg_line = commit['message'].split('\n')
+            msg = msg_line[0].strip()
+            if len(msg_line) > 1:
+                msg += ' [..]'
+            if len(msg) > 100:
+                msg = msg[:97] + '...'
+            msg += ' by ' + commit['author']['username']
+            if len(msg) + 1 + len(commit_message) > 600:
+                commit_message = f'(other {i} commits)\n{commit_message}'
+                break
+            else:
+                commit_message = f'{msg}\n{commit_message}'
+            i -= 1
+        commit_message = f'```{commit_message.strip()}\n```'
+        last_commit = commits[-1]
+        r = re.search(r'sync with upstream\s+https://github.com/tiann/KernelSU/commit/(.*)\s*', last_commit['message'])
+        if r is not None:
+            upstream_commit = r.group(1)
+            before_commit = GITHUB_EVENT['before']
+            repo_url = GITHUB_EVENT['repository']['html_url']
+            upstream_diff = f'[Upstream Update]({repo_url}/compare/{before_commit}...{upstream_commit})\n'
+    elif 'head_commit' in GITHUB_EVENT:
+        msg = GITHUB_EVENT["head_commt"]["msg"]
         if len(msg) > 256:
             msg = msg[:253] + '...'
-        if len(msg) + 1 + len(commit_message) > 980:
-            commit_message = f'(other {i} commits)\n{commit_message}'
-        else:
-            commit_message = f'{msg}\n{commit_message}'
-        i -= 1
-    commit_message = f'```\n{commit_message.strip()}\n```'
-elif 'head_commit' in GITHUB_EVENT:
-    msg = GITHUB_EVENT["head_commt"]["msg"]
-    if len(msg) > 256:
-        msg = msg[:253] + '...'
-    commit_message = f'```\n{msg.strip()}\n```\n'
-else:
-    commit_message = ''
+        commit_message = f'```\n{msg.strip()}\n```\n'
+    else:
+        commit_message = ''
+except:
+    from traceback import print_exc
+    print_exc()
 
 if 'compare' in GITHUB_EVENT:
     commit_url = GITHUB_EVENT['compare']
@@ -49,6 +69,8 @@ elif 'head_commit' in GITHUB_EVENT:
 else:
     commit_line = ''
 
+if upstream_diff is not None:
+    commit_message += upstream_diff
 
 MSG_TEMPLATE = """
 **{title}**
@@ -67,8 +89,6 @@ def get_caption():
         commit_url=commit_line,
         run_url=RUN_URL,
     )
-    if len(msg) > 1024:
-        return RUN_URL
     return msg
 
 
