@@ -9,6 +9,7 @@ on:
       - 'manager/**'
       - 'kernel/**'
       - 'userspace/ksud/**'
+      - 'scripts/ksubot.py'
   pull_request:
     branches: [ "main", "dev" ]
     paths:
