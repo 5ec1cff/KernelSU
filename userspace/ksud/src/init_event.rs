@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use log::{info, warn};
+use rustix::fs::{MountFlags, mount};
 use std::path::Path;
-use rustix::fs::{mount, MountFlags};
 
 use crate::module::{handle_updated_modules, prune_modules};
 use crate::utils::is_safe_mode;
 use crate::{
     assets, defs, ksucalls, restorecon,
-    utils::{self, ensure_clean_dir, find_tmp_path},
+    utils::{self, find_tmp_path},
 };
 
 use crate::defs::{KSU_MOUNT_SOURCE, NO_MOUNT_PATH, NO_TMPFS_PATH};
