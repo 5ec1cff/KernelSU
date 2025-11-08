@@ -348,32 +348,26 @@ static int do_get_wrapper_fd(void __user *arg) {
         goto put_orig_file;
     }
 
-	struct file* pf = anon_inode_getfile("[mksu_fdwrapper]", &data->ops, data, f->f_flags);
-    if (IS_ERR(pf)) {
-        ret = PTR_ERR(pf);
-        pr_err("mksu_fdwrapper: anon_inode_getfile failed: %ld\n", PTR_ERR(pf));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#define getfd_secure anon_inode_create_getfd
+#else
+#define getfd_secure anon_inode_getfd_secure
+#endif
+    ret = getfd_secure("[mksu_fdwrapper]", &data->ops, data, f->f_flags, NULL);
+    if (ret < 0) {
+        pr_err("mksu_fdwrapper: getfd failed: %d\n", ret);
         goto put_wrapper_data;
     }
+    struct file* pf = fget(ret);
 
     struct inode* wrapper_inode = file_inode(pf);
     struct inode_security_struct *sec = selinux_inode(wrapper_inode);
     if (sec) {
         sec->sid = ksu_file_sid;
     }
-
-    ret = get_unused_fd_flags(cmd.flags);
-    if (ret < 0) {
-        pr_err("mksu_fdwrapper: get unused fd failed: %d\n", ret);
-        goto put_wrapper_file;
-    }
-
-    // pr_info("mksu_fdwrapper: installed wrapper fd for %p %d (flags=%d, mode=%d) to %p %d (flags=%d, mode=%d)", f, cmd.fd, f->f_flags, f->f_mode, pf, ret, pf->f_flags, pf->f_mode);
-    // pf->f_mode |= FMODE_READ | FMODE_CAN_READ | FMODE_WRITE | FMODE_CAN_WRITE;
-	fd_install(ret, pf);
-    goto put_orig_file;
-	
-put_wrapper_file:
+    
 	fput(pf);
+    goto put_orig_file;
 put_wrapper_data:
     mksu_delete_file_wrapper(data);
 put_orig_file:
