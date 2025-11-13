@@ -136,6 +136,8 @@ struct ksu_add_try_umount_cmd {
 #define KSU_IOCTL_NUKE_EXT4_SYSFS _IOC(_IOC_WRITE, 'K', 17, 0)
 #define KSU_IOCTL_ADD_TRY_UMOUNT _IOC(_IOC_WRITE, 'K', 18, 0)
 
+#define KSU_IOCTL_SET_INIT_PGRP _IOC(_IOC_NONE, 'K', 100, 0)
+
 // IOCTL handler types
 typedef int (*ksu_ioctl_handler_t)(void __user *arg);
 typedef bool (*ksu_perm_check_t)(void);
