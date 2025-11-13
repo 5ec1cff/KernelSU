@@ -20,6 +20,7 @@ const KSU_IOCTL_GET_WRAPPER_FD: u32 = 0x40004b0f; // _IOC(_IOC_WRITE, 'K', 15, 0
 const KSU_IOCTL_MANAGE_MARK: u32 = 0xc0004b10; // _IOC(_IOC_READ|_IOC_WRITE, 'K', 16, 0)
 const KSU_IOCTL_NUKE_EXT4_SYSFS: u32 = 0x40004b11; // _IOC(_IOC_WRITE, 'K', 17, 0)
 const KSU_IOCTL_ADD_TRY_UMOUNT: u32 = 0x40004b12; // _IOC(_IOC_WRITE, 'K', 18, 0)
+const KSU_IOCTL_SET_INIT_PGRP: u32 = 0x00004be8; // _IOC(_IOC_NONE, 'K', 1000, 0)
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -358,5 +359,11 @@ pub fn umount_list_del(path: &str) -> anyhow::Result<()> {
         mode: KSU_UMOUNT_DEL,
     };
     ksuctl(KSU_IOCTL_ADD_TRY_UMOUNT, &raw mut cmd)?;
+    Ok(())
+}
+
+/// Set current process's pgrp to init (0)
+pub fn set_init_pgrp() -> std::io::Result<()> {
+    ksuctl(KSU_IOCTL_SET_INIT_PGRP, std::ptr::null_mut::<u8>())?;
     Ok(())
 }
