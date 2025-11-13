@@ -17,6 +17,7 @@ const KSU_IOCTL_GET_FEATURE: u32 = 0xc0004b0d; // _IOC(_IOC_READ|_IOC_WRITE, 'K'
 const KSU_IOCTL_SET_FEATURE: u32 = 0x40004b0e; // _IOC(_IOC_WRITE, 'K', 14, 0)
 const KSU_IOCTL_GET_WRAPPER_FD: u32 = 0x40004b0f; // _IOC(_IOC_WRITE, 'K', 15, 0)
 const KSU_IOCTL_MANAGE_MARK: u32 = 0xc0004b10; // _IOC(_IOC_READ|_IOC_WRITE, 'K', 16, 0)
+const KSU_IOCTL_SET_INIT_PGRP: u32 = 19217; // _IOC(_IOC_NONE, 'K', 17, 0)
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -292,5 +293,11 @@ pub fn mark_refresh() -> std::io::Result<()> {
         result: 0,
     };
     ksuctl(KSU_IOCTL_MANAGE_MARK, &mut cmd as *mut _)?;
+    Ok(())
+}
+
+/// Set current process's pgrp to init (0)
+pub fn set_init_pgrp() -> std::io::Result<()> {
+    ksuctl(KSU_IOCTL_SET_INIT_PGRP, std::ptr::null_mut::<u8>())?;
     Ok(())
 }
