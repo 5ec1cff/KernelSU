@@ -40,6 +40,8 @@ mod android {
     pub const KSU_BACKUP_DIR: &str = WORKING_DIR;
     pub const KSU_BACKUP_FILE_PREFIX: &str = "ksu_backup_";
     pub const BACKUP_FILENAME: &str = "stock_image.sha1";
+
+    pub const USE_INIT_PGRP_PATH: &str = concatcp!(WORKING_DIR, ".initpgrp");
 }
 
 pub const VERSION_CODE: &str = include_str!(concat!(env!("OUT_DIR"), "/VERSION_CODE"));
