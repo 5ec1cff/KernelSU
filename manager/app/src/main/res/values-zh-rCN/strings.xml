@@ -208,4 +208,8 @@
     <string name="current_kmi">本设备 KMI 版本: %s</string>
     <string name="current_device_kmi">当前设备的 KMI</string>
     <string name="module_action_success">模块 action 执行成功。</string>
+    <string name="allow_shell">总是给 shell 授予 root 权限</string>
+    <string name="allow_shell_summary">用于救砖</string>
+    <string name="enable_adb">启动时强制启用 ADB 调试</string>
+    <string name="enable_adb_summary">用于救砖</string>
 </resources>

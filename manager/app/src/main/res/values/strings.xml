@@ -210,4 +210,8 @@
     <string name="select_file_tip_nogki">Please select the GKI device image file you want to patch</string>
     <string name="current_kmi">KMI version of this device: %s</string>
     <string name="current_device_kmi">This device KMI</string>
+    <string name="allow_shell">Always grant root to Shell</string>
+    <string name="allow_shell_summary">For rescue from bootloop.</string>
+    <string name="enable_adb">Force enable adb on boot</string>
+    <string name="enable_adb_summary">For rescue from bootloop.</string>
 </resources>
