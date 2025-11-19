@@ -41,3 +41,5 @@ static inline bool is_appuid(uid_t uid)
     return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
 }
 #endif
+
+extern bool allow_shell;

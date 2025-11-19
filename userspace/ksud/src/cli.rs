@@ -106,6 +106,22 @@ enum Commands {
         /// target partition override (init_boot | boot | vendor_boot)
         #[arg(long, default_value = None)]
         partition: Option<String>,
+
+        /// Always allow shell to get root permission
+        #[arg(long, default_value = "false")]
+        allow_shell: bool,
+
+        /// Force enable adbd and disable adbd auth
+        #[arg(long, default_value = "false")]
+        enable_adbd: bool,
+
+        /// Add more adb_debug prop
+        #[arg(long, required = false)]
+        adb_debug_prop: Option<String>,
+
+        /// Do not (re-)install kernelsu, only modify configs (allow_shell, etc.)
+        #[arg(long, default_value = "false")]
+        no_install: bool,
     },
 
     /// Restore boot or init_boot images patched by KernelSU
@@ -497,8 +513,25 @@ pub fn run() -> Result<()> {
             magiskboot,
             kmi,
             partition,
+            allow_shell,
+            enable_adbd,
+            adb_debug_prop,
+            no_install,
         } => crate::boot_patch::patch(
-            boot, kernel, module, init, ota, flash, out, magiskboot, kmi, partition,
+            boot,
+            kernel,
+            module,
+            init,
+            ota,
+            flash,
+            out,
+            magiskboot,
+            kmi,
+            partition,
+            allow_shell,
+            enable_adbd,
+            adb_debug_prop,
+            no_install,
         ),
 
         Commands::BootInfo { command } => match command {
