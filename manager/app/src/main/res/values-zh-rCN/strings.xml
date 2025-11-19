@@ -214,4 +214,8 @@
     <string name="settings_floating_bottom_bar_summary">使用 Apple 风格的悬浮底栏</string>
     <string name="settings_enable_glass">液态玻璃</string>
     <string name="settings_enable_glass_summary">启用悬浮底栏的液态玻璃效果</string>
+    <string name="allow_shell">总是给 shell 授予 root 权限</string>
+    <string name="allow_shell_summary">用于救砖</string>
+    <string name="enable_adb">启动时强制启用 ADB 调试</string>
+    <string name="enable_adb_summary">用于救砖</string>
 </resources>

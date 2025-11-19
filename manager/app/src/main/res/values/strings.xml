@@ -216,4 +216,8 @@
     <string name="settings_floating_bottom_bar_summary">Use Apple style floating bottom bar</string>
     <string name="settings_enable_glass">Liquid glass</string>
     <string name="settings_enable_glass_summary">Enable liquid glass effect for floating bottom bar</string>
+    <string name="allow_shell">Always grant root to Shell</string>
+    <string name="allow_shell_summary">For rescue from bootloop.</string>
+    <string name="enable_adb">Force enable adb on boot</string>
+    <string name="enable_adb_summary">For rescue from bootloop.</string>
 </resources>
