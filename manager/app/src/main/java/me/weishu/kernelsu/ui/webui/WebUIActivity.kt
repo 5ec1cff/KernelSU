@@ -58,7 +58,28 @@ class WebUIActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             superUserViewModel.fetchAppList()
+            handleSetupWebview()
+        }
+    }
+
+    private fun handleSetupWebview() {
+        val density = resources.displayMetrics.density
+        val rootView = findViewById<android.view.View>(android.R.id.content)
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, windowInsets ->
+            val inset = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            insets = Insets(
+                top = (inset.top / density).toInt(),
+                bottom = (inset.bottom / density).toInt(),
+                left = (inset.left / density).toInt(),
+                right = (inset.right / density).toInt()
+            )
+
             setupWebView()
+
+            WindowInsetsCompat.CONSUMED
         }
     }
 
@@ -79,7 +100,6 @@ class WebUIActivity : ComponentActivity() {
         val moduleDir = "/data/adb/modules/${moduleId}"
         val webRoot = File("${moduleDir}/webroot")
         val rootShell = createRootShell(true).also { this.rootShell = it }
-        insets = Insets(0, 0, 0, 0)
 
         val webViewAssetLoader = WebViewAssetLoader.Builder()
             .setDomain("mui.kernelsu.org")
@@ -116,18 +136,6 @@ class WebUIActivity : ComponentActivity() {
 
         val webView = WebView(this).apply {
             setBackgroundColor(Color.TRANSPARENT)
-            val density = resources.displayMetrics.density
-
-            ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
-                val inset = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-                insets = Insets(
-                    top = (inset.top / density).toInt(),
-                    bottom = (inset.bottom / density).toInt(),
-                    left = (inset.left / density).toInt(),
-                    right = (inset.right / density).toInt()
-                )
-                WindowInsetsCompat.CONSUMED
-            }
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
