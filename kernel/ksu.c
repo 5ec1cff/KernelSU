@@ -3,6 +3,7 @@
 #include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
+#include <linux/moduleparam.h>
 
 #include "allowlist.h"
 #include "feature.h"
@@ -11,6 +12,9 @@
 #include "syscall_hook_manager.h"
 #include "ksud.h"
 #include "supercalls.h"
+
+bool allow_shell = false;
+module_param(allow_shell, bool, 0);
 
 int __init kernelsu_init(void)
 {
@@ -23,6 +27,9 @@ int __init kernelsu_init(void)
     pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
     pr_alert("*************************************************************");
 #endif
+    if (allow_shell) {
+        pr_alert("shell is allowed at init!");
+    }
 
     ksu_feature_init();
 
