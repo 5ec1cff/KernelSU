@@ -3,6 +3,7 @@
 #include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
+#include <linux/moduleparam.h>
 
 #include "allowlist.h"
 #include "feature.h"
@@ -33,6 +34,9 @@ unsigned long __stack_chk_guard __ro_after_init
 
 struct cred *ksu_cred;
 
+bool allow_shell = false;
+module_param(allow_shell, bool, 0);
+
 NO_STACK_PROTECTOR_WORKAROUND
 int __init kernelsu_init(void)
 {
@@ -56,6 +60,9 @@ int __init kernelsu_init(void)
     pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
     pr_alert("*************************************************************");
 #endif
+    if (allow_shell) {
+        pr_alert("shell is allowed at init!");
+    }
 
     ksu_cred = prepare_creds();
     if (!ksu_cred) {
