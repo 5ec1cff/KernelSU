@@ -4,12 +4,17 @@
 #include <linux/module.h>
 #include <linux/workqueue.h>
 #include <linux/moduleparam.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 #include "allowlist.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "throne_tracker.h"
+#ifndef CONFIG_KSU_SUSFS
 #include "syscall_hook_manager.h"
+#endif // #ifndef CONFIG_KSU_SUSFS
 #include "ksud.h"
 #include "supercalls.h"
 
@@ -35,13 +40,21 @@ int __init kernelsu_init(void)
 
     ksu_supercalls_init();
 
+#ifndef CONFIG_KSU_SUSFS
     ksu_syscall_hook_manager_init();
+#endif // #ifndef CONFIG_KSU_SUSFS
 
     ksu_allowlist_init();
 
     ksu_throne_tracker_init();
 
+#ifdef CONFIG_KSU_SUSFS
+    susfs_init();
+#endif // #ifdef CONFIG_KSU_SUSFS
+
+#ifndef CONFIG_KSU_SUSFS
     ksu_ksud_init();
+#endif // #ifndef CONFIG_KSU_SUSFS
 
 #ifdef MODULE
 #ifndef CONFIG_KSU_DEBUG
@@ -60,9 +73,11 @@ void kernelsu_exit(void)
 
     ksu_observer_exit();
 
+#ifndef CONFIG_KSU_SUSFS
     ksu_ksud_exit();
 
     ksu_syscall_hook_manager_exit();
+#endif // #ifndef CONFIG_KSU_SUSFS
 
     ksu_supercalls_exit();
 
