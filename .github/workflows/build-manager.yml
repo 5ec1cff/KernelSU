@@ -22,6 +22,7 @@ on:
       - 'userspace/**'
       - 'scripts/ksubot.py'
   workflow_call:
+  workflow_dispatch:
 
 jobs:
   build-lkm:
@@ -81,14 +82,14 @@ jobs:
       - name: Setup need_upload
         id: need_upload
         run: |
-          if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
+          if [ ! -z "${{ secrets.BOT_TOKEN }}" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
             echo "UPLOAD=true" >> $GITHUB_OUTPUT
           else
             echo "UPLOAD=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Write key
-        if: ${{ ( github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' )) || github.ref_type == 'tag' }}
+        if: ${{ github.event_name != 'pull_request' || github.ref_type == 'tag' }}
         run: |
           if [ ! -z "${{ secrets.KEYSTORE }}" ]; then
             {
