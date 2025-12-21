@@ -16,6 +16,9 @@
 #include <linux/uaccess.h>
 #include <linux/namei.h>
 #include <linux/workqueue.h>
+#include <asm/syscall.h>
+#include <asm/cacheflush.h>
+#include "pte.h"
 
 #include "manager.h"
 #include "allowlist.h"
@@ -53,12 +56,10 @@ static const char KERNEL_SU_RC[] =
 
     "\n";
 
-static void stop_vfs_read_hook();
+static void stop_read_hook();
 static void stop_execve_hook();
 static void stop_input_hook();
 
-static struct work_struct stop_vfs_read_work;
-static struct work_struct stop_execve_hook_work;
 static struct work_struct stop_input_hook_work;
 
 u32 ksu_file_sid;
@@ -225,7 +226,7 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
             const char __user *p = get_user_arg_ptr(*argv, 1);
             if (p && !IS_ERR(p)) {
                 char first_arg[16];
-                strncpy_from_user_nofault(first_arg, p, sizeof(first_arg));
+                strncpy_from_user(first_arg, p, sizeof(first_arg));
                 pr_info("/system/bin/init first arg: %s\n", first_arg);
                 if (!strcmp(first_arg, "second_stage")) {
                     pr_info("/system/bin/init second_stage executed\n");
@@ -328,7 +329,7 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
     static bool rc_inserted = false;
     if (rc_inserted) {
         // we don't need this kprobe, unregister it!
-        stop_vfs_read_hook();
+        stop_read_hook();
         return 0;
     }
     rc_inserted = true;
@@ -435,13 +436,12 @@ bool ksu_is_safe_mode()
     return false;
 }
 
-static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
+static long (*orig_sys_execve)(const struct pt_regs *regs);
+static long ksu_sys_execve(const struct pt_regs *regs)
 {
-    struct pt_regs *real_regs = PT_REAL_REGS(regs);
-    const char __user **filename_user =
-        (const char **)&PT_REGS_PARM1(real_regs);
+    const char __user **filename_user = (const char **)&PT_REGS_PARM1(regs);
     const char __user *const __user *__argv =
-        (const char __user *const __user *)PT_REGS_PARM2(real_regs);
+        (const char __user *const __user *)PT_REGS_PARM2(regs);
     struct user_arg_ptr argv = { .ptr.native = __argv };
     struct filename filename_in, *filename_p;
     char path[32];
@@ -450,34 +450,35 @@ static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
     const char __user *fn;
 
     if (!filename_user)
-        return 0;
+        goto do_orig;
 
     addr = untagged_addr((unsigned long)*filename_user);
     fn = (const char __user *)addr;
 
     memset(path, 0, sizeof(path));
-    ret = strncpy_from_user_nofault(path, fn, 32);
-    if (ret < 0 && try_set_access_flag(addr)) {
-        ret = strncpy_from_user_nofault(path, fn, 32);
-    }
+    ret = strncpy_from_user(path, fn, 32);
     if (ret < 0) {
         pr_err("Access filename failed for execve_handler_pre\n");
-        return 0;
+        goto do_orig;
     }
     filename_in.name = path;
 
     filename_p = &filename_in;
-    return ksu_handle_execveat_ksud(AT_FDCWD, &filename_p, &argv, NULL, NULL);
+    ksu_handle_execveat_ksud(AT_FDCWD, &filename_p, &argv, NULL, NULL);
+
+do_orig:
+    return orig_sys_execve(regs);
 }
 
-static int sys_read_handler_pre(struct kprobe *p, struct pt_regs *regs)
+static long (*orig_sys_read)(const struct pt_regs *regs);
+static long ksu_sys_read(const struct pt_regs *regs)
 {
-    struct pt_regs *real_regs = PT_REAL_REGS(regs);
-    unsigned int fd = PT_REGS_PARM1(real_regs);
-    char __user **buf_ptr = (char __user **)&PT_REGS_PARM2(real_regs);
-    size_t count_ptr = (size_t *)&PT_REGS_PARM3(real_regs);
+    unsigned int fd = PT_REGS_PARM1(regs);
+    char __user **buf_ptr = (char __user **)&PT_REGS_PARM2(regs);
+    size_t count_ptr = (size_t *)&PT_REGS_PARM3(regs);
 
-    return ksu_handle_sys_read(fd, buf_ptr, count_ptr);
+    ksu_handle_sys_read(fd, buf_ptr, count_ptr);
+    return orig_sys_read(regs);
 }
 
 static int input_handle_event_handler_pre(struct kprobe *p,
@@ -489,46 +490,79 @@ static int input_handle_event_handler_pre(struct kprobe *p,
     return ksu_handle_input_handle_event(type, code, value);
 }
 
-static struct kprobe execve_kp = {
-    .symbol_name = SYS_EXECVE_SYMBOL,
-    .pre_handler = sys_execve_handler_pre,
-};
+// This function appears in 5.14:
+// https://github.com/torvalds/linux/commit/fade9c2c6ee2baea7df8e6059b3f143c681e5ce4#diff-fc9ef24572e183c6c049b5ae8029762159787f8669d909452bdf40db748f94a7L52
+// https://github.com/torvalds/linux/commit/814b186079cd54d3fe3b6b8ab539cbd44705ef9d#diff-fc9ef24572e183c6c049b5ae8029762159787f8669d909452bdf40db748f94a7R53
+// However, it's backport to android13-5.10 but not to android12-5.10.
+// https://cs.android.com/android/_/android/kernel/common/+/6d9f07d8f1ffc310a6877153fe882f35ae380799
+// So we need to grep kernel source code to detect which one to use.
+#if KSU_NEW_DCACHE_FLUSH
+#define ksu_flush_dcache(start, sz)                                            \
+    ({                                                                         \
+        unsigned long __start = (start);                                       \
+        unsigned long __end = __start + (sz);                                  \
+        dcache_clean_inval_poc(__start, __end);                                \
+    })
+#else
+#define ksu_flush_dcache(start, sz) __flush_dcache_area((void *)start, sz)
+#endif
 
-static struct kprobe vfs_read_kp = {
-    .symbol_name = SYS_READ_SYMBOL,
-    .pre_handler = sys_read_handler_pre,
-};
+static syscall_fn_t *syscall_table = NULL;
+
+static void replace_syscall_table(int nr, syscall_fn_t fn, syscall_fn_t *old)
+{
+    pte_t orig_pte, pte;
+    pte_t *ptep = page_from_virt((uintptr_t)&syscall_table[nr]);
+    if (ptep == NULL) {
+        pr_err("Failed to get PTE for syscall_table[%d]\n", nr);
+        return;
+    }
+    syscall_fn_t *orig_p = &syscall_table[nr], orig = READ_ONCE(*orig_p);
+    orig_pte = READ_ONCE(*ptep);
+    if (old) {
+        *old = orig;
+        dmb(ishst);
+    }
+
+    pr_info("Before hook syscall %d, ptr=0x%lx, *ptr=0x%lx", nr,
+            (unsigned long)orig_p, (unsigned long)orig);
+
+    pte = set_pte_bit(orig_pte, __pgprot(PTE_DBM));
+    pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
+    ksu_set_pte(ptep, pte);
+    flush_tlb_all();
+
+    syscall_table[nr] = fn;
+
+    ksu_set_pte(ptep, orig_pte);
+    flush_tlb_all();
+
+    ksu_flush_dcache(&syscall_table[nr], sizeof(void *));
+
+    pr_info("After hook syscall %d, ptr=0x%lx, *ptr=0x%lx", nr,
+            (unsigned long)orig_p, (unsigned long)READ_ONCE(syscall_table[nr]));
+}
 
 static struct kprobe input_event_kp = {
     .symbol_name = "input_event",
     .pre_handler = input_handle_event_handler_pre,
 };
 
-static void do_stop_vfs_read_hook(struct work_struct *work)
-{
-    unregister_kprobe(&vfs_read_kp);
-}
-
-static void do_stop_execve_hook(struct work_struct *work)
-{
-    unregister_kprobe(&execve_kp);
-}
-
 static void do_stop_input_hook(struct work_struct *work)
 {
     unregister_kprobe(&input_event_kp);
 }
 
-static void stop_vfs_read_hook()
+static void stop_read_hook()
 {
-    bool ret = schedule_work(&stop_vfs_read_work);
-    pr_info("unregister vfs_read kprobe: %d!\n", ret);
+    replace_syscall_table(__NR_read, orig_sys_read, NULL);
+    pr_info("unhook sys_read\n");
 }
 
 static void stop_execve_hook()
 {
-    bool ret = schedule_work(&stop_execve_hook_work);
-    pr_info("unregister execve kprobe: %d!\n", ret);
+    replace_syscall_table(__NR_execve, orig_sys_execve, NULL);
+    pr_info("unhook sys_execve\n");
 }
 
 static void stop_input_hook()
@@ -546,25 +580,22 @@ static void stop_input_hook()
 void ksu_ksud_init()
 {
     int ret;
+    syscall_table = kallsyms_lookup_name("sys_call_table");
 
-    ret = register_kprobe(&execve_kp);
-    pr_info("ksud: execve_kp: %d\n", ret);
-
-    ret = register_kprobe(&vfs_read_kp);
-    pr_info("ksud: vfs_read_kp: %d\n", ret);
+    replace_syscall_table(__NR_execve, ksu_sys_execve, &orig_sys_execve);
+    replace_syscall_table(__NR_read, ksu_sys_read, &orig_sys_read);
 
     ret = register_kprobe(&input_event_kp);
     pr_info("ksud: input_event_kp: %d\n", ret);
 
-    INIT_WORK(&stop_vfs_read_work, do_stop_vfs_read_hook);
-    INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
     INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
 }
 
 void ksu_ksud_exit()
 {
-    unregister_kprobe(&execve_kp);
+    stop_execve_hook();
+    // TODO:
     // this should be done before unregister vfs_read_kp
-    // unregister_kprobe(&vfs_read_kp);
+    // stop_vfs_read_hook();
     unregister_kprobe(&input_event_kp);
 }
