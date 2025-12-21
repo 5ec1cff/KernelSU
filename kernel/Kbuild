@@ -15,6 +15,7 @@ kernelsu-objs += ksud.o
 kernelsu-objs += seccomp_cache.o
 kernelsu-objs += file_wrapper.o
 kernelsu-objs += util.o
+kernelsu-objs += pte.o
 
 kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o
@@ -60,6 +61,26 @@ $(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repo
 ccflags-y += -DKSU_VERSION=16
 endif
 
+KSU_NEW_DCACHE_FLUSH := $(shell grep -q __flush_dcache_area $(srctree)/arch/arm64/include/asm/cacheflush.h ; echo $$?)
+$(info -- KSU_NEW_DCACHE_FLUSH: $(KSU_NEW_DCACHE_FLUSH))
+
+KSU_MTE_SYNC_TAGS_DEF := $(shell grep 'void mte_sync_tags' $(srctree)/arch/arm64/include/asm/mte.h | grep -v 'static inline')
+# 6.6
+KSU_MTE_SYNC_TAGS_NR_PAGES := $(shell echo '$(KSU_MTE_SYNC_TAGS_DEF)' | grep -q 'nr_pages' && echo 1 || echo 0)
+# 6.1
+KSU_MTE_SYNC_TAGS_NORMAL := $(shell echo '$(KSU_MTE_SYNC_TAGS_DEF)' | grep -q '(pte_t pte)' && echo 1 || echo 0)
+# 13-5.10
+KSU_MTE_SYNC_TAGS_OLD_PTE := $(shell echo '$(KSU_MTE_SYNC_TAGS_DEF)' | grep -q 'old_pte' && echo 1 || echo 0)
+# 12-5.10
+KSU_MTE_SYNC_TAGS_PTEP := $(shell echo '$(KSU_MTE_SYNC_TAGS_DEF)' | grep -q '*ptep' && echo 1 || echo 0)
+KSU_DEF_MTE_SYNC_TAGS := 'extern $(KSU_MTE_SYNC_TAGS_DEF)'
+
+$(info -- KSU_DEF_MTE_SYNC_TAGS: $(KSU_DEF_MTE_SYNC_TAGS))
+$(info -- KSU_MTE_SYNC_TAGS_NR_PAGES: $(KSU_MTE_SYNC_TAGS_NR_PAGES))
+$(info -- KSU_MTE_SYNC_TAGS_PTEP: $(KSU_MTE_SYNC_TAGS_PTEP))
+$(info -- KSU_MTE_SYNC_TAGS_OLD_PTE: $(KSU_MTE_SYNC_TAGS_OLD_PTE))
+$(info -- KSU_MTE_SYNC_TAGS_NORMAL: $(KSU_MTE_SYNC_TAGS_NORMAL))
+
 OFFICIAL_EXPECTED_SIZE := 0x033b
 OFFICIAL_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
 
@@ -83,6 +104,14 @@ ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 ccflags-y += -DOFFICIAL_EXPECTED_SIZE=$(OFFICIAL_EXPECTED_SIZE)
 ccflags-y += -DOFFICIAL_EXPECTED_HASH=\"$(OFFICIAL_EXPECTED_HASH)\"
+
+ccflags-y += -DKSU_NEW_DCACHE_FLUSH=$(KSU_NEW_DCACHE_FLUSH)
+
+ccflags-y += -DKSU_DEF_MTE_SYNC_TAGS=$(KSU_DEF_MTE_SYNC_TAGS)
+ccflags-y += -DKSU_MTE_SYNC_TAGS_NR_PAGES=$(KSU_MTE_SYNC_TAGS_NR_PAGES)
+ccflags-y += -DKSU_MTE_SYNC_TAGS_PTEP=$(KSU_MTE_SYNC_TAGS_PTEP)
+ccflags-y += -DKSU_MTE_SYNC_TAGS_OLD_PTE=$(KSU_MTE_SYNC_TAGS_OLD_PTE)
+ccflags-y += -DKSU_MTE_SYNC_TAGS_NORMAL=$(KSU_MTE_SYNC_TAGS_NORMAL)
 
 ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
