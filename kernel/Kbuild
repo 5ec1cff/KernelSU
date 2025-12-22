@@ -60,6 +60,9 @@ $(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repo
 ccflags-y += -DKSU_VERSION=16
 endif
 
+OFFICIAL_EXPECTED_SIZE := 0x033b
+OFFICIAL_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+
 ifndef KSU_EXPECTED_SIZE
 KSU_EXPECTED_SIZE := 384
 endif
@@ -78,6 +81,8 @@ $(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
 
 ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
+ccflags-y += -DOFFICIAL_EXPECTED_SIZE=$(OFFICIAL_EXPECTED_SIZE)
+ccflags-y += -DOFFICIAL_EXPECTED_HASH=\"$(OFFICIAL_EXPECTED_HASH)\"
 
 ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
