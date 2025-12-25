@@ -369,7 +369,7 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
         return 0;
     }
 
-    if (strcmp(dpath, "/system/etc/init/init.rc")) {
+    if (strcmp(dpath, "/system/etc/init/hw/init.rc")) {
         return 0;
     }
 
