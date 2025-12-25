@@ -280,7 +280,7 @@ static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
         goto append_ksu_rc;
 
     ret = orig_read(file, buf, count, pos);
-    if (ret != 0) {
+    if (ret != 0 || ksu_rc_pos >= ksu_rc_len) {
         return ret;
     } else {
         pr_info("read_proxy: orig read finished, start append rc\n");
@@ -313,10 +313,10 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
         goto append_ksu_rc;
 
     ret = orig_read_iter(iocb, to);
-    if (ret != 0) {
+    if (ret != 0 || ksu_rc_pos >= ksu_rc_len) {
         return ret;
     } else {
-        pr_info("read_iter_proxy: orig read finished, start append rc\n");
+        pr_info("read_iter_proxy: orig read finished (ret %ld), start append rc\n", ret);
     }
 append_ksu_rc:
     // copy_to_iter returns the number of copied bytes
