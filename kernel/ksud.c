@@ -517,12 +517,18 @@ static void replace_syscall_table(int nr, syscall_fn_t fn, syscall_fn_t *old)
         pr_err("Failed to get PTE for syscall_table[%d]\n", nr);
         return;
     }
+    pr_info("syscall 0x%lx ptep=0x%lx pte=0x%lx", (uintptr_t)&syscall_table[nr],
+            (uintptr_t)ptep, (uintptr_t)ptep->pte);
     syscall_fn_t *orig_p = &syscall_table[nr], orig = READ_ONCE(*orig_p);
     orig_pte = READ_ONCE(*ptep);
     if (old) {
         *old = orig;
         dmb(ishst);
     }
+
+    pte_t *ptep_ptep = page_from_virt((uintptr_t)ptep);
+    pr_info("syscall_ptep 0x%lx ptep=0x%lx pte=0x%lx", (uintptr_t)ptep,
+            (uintptr_t)ptep_ptep, (uintptr_t)ptep_ptep->pte);
 
     pr_info("Before hook syscall %d, ptr=0x%lx, *ptr=0x%lx", nr,
             (unsigned long)orig_p, (unsigned long)orig);
