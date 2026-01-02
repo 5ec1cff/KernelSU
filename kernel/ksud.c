@@ -207,6 +207,8 @@ fail:
     return false;
 }
 
+static void stop_finit_module_hook();
+
 void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
 {
     static const char app_process[] = "/system/bin/app_process";
@@ -223,6 +225,7 @@ void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
         if (!init_second_stage_executed &&
             check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
             pr_info("/system/bin/init second_stage executed\n");
+            stop_finit_module_hook();
             apply_kernelsu_rules();
             cache_sid();
             setup_ksu_cred();
@@ -527,6 +530,36 @@ static long ksu_sys_fstat(const struct pt_regs *regs)
     return ret;
 }
 
+static long (*orig_finit_module)(const struct pt_regs *regs);
+static long ksu_finit_module(const struct pt_regs *regs)
+{
+    // https://cs.android.com/android/platform/superproject/main/+/main:system/core/libmodprobe/libmodprobe_ext.cpp;l=53;drc=61197364367c9e404c7da6900658f1b16c42d0da
+    unsigned int fd = PT_REGS_PARM1(regs);
+    const char *name;
+
+    struct file *file = fget(fd);
+    if (!file) {
+        goto call_orig;
+    }
+
+    name = file->f_path.dentry->d_name.name;
+    pr_info("loading kernel module %s", name);
+
+    if (strcmp(name, "mkp.ko") == 0) {
+        goto skip_load;
+    }
+
+    fput(file);
+
+call_orig:
+    return orig_finit_module(regs);
+
+skip_load:
+    fput(file);
+    pr_info("skip load %s", name);
+    return 0;
+}
+
 static int input_handle_event_handler_pre(struct kprobe *p,
                                           struct pt_regs *regs)
 {
@@ -622,6 +655,11 @@ static void stop_execve_hook()
     pr_info("unhook sys_execve\n");
 }
 
+static void stop_finit_module_hook()
+{
+    replace_syscall_table(__NR_finit_module, orig_finit_module, NULL);
+}
+
 static void stop_input_hook()
 {
     static bool input_hook_stopped = false;
@@ -642,6 +680,8 @@ void ksu_ksud_init()
     replace_syscall_table(__NR_execve, ksu_sys_execve, &orig_sys_execve);
     replace_syscall_table(__NR_read, ksu_sys_read, &orig_sys_read);
     replace_syscall_table(__NR_fstat, ksu_sys_fstat, &orig_sys_fstat);
+    replace_syscall_table(__NR_finit_module, ksu_finit_module,
+                          &orig_finit_module);
 
     ret = register_kprobe(&input_event_kp);
     pr_info("ksud: input_event_kp: %d\n", ret);
