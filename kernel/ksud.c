@@ -354,10 +354,10 @@ static void ksu_install_rc_hook(struct file *file)
     static bool rc_hooked = false;
     if (rc_hooked) {
         // we don't need this kprobe, unregister it!
-        stop_read_hook();
         return;
     }
     rc_hooked = true;
+    stop_read_hook();
 
     // now we can sure that the init process is reading
     // `/system/etc/init/init.rc`
