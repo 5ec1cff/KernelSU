@@ -17,6 +17,7 @@
 #include <linux/namei.h>
 #include <linux/workqueue.h>
 #include <linux/uio.h>
+#include <linux/of.h>
 #include <asm/syscall.h>
 #include <asm/cacheflush.h>
 #include "pte.h"
@@ -590,6 +591,8 @@ static void stop_input_hook()
 void ksu_ksud_init()
 {
     int ret;
+    u32 mkp_policy;
+    struct device_node *node;
     syscall_table = kallsyms_lookup_name("sys_call_table");
 
     replace_syscall_table(__NR_execve, ksu_sys_execve, &orig_sys_execve);
@@ -599,6 +602,17 @@ void ksu_ksud_init()
     pr_info("ksud: input_event_kp: %d\n", ret);
 
     INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
+
+    node = of_find_node_by_path("/chosen");
+    if (node) {
+        if (of_property_read_u32(node, "mkp,policy", &mkp_policy) == 0) {
+            pr_info("mkp_policy: %x\n", mkp_policy);
+        } else {
+            pr_err("failed to find mkp property");
+        }
+    } else {
+        pr_err("failed to find mkp node");
+    }
 }
 
 void ksu_ksud_exit()
