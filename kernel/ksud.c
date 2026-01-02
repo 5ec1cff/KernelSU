@@ -530,13 +530,15 @@ static void replace_syscall_table(int nr, syscall_fn_t fn, syscall_fn_t *old)
     pr_info("syscall_ptep 0x%lx ptep=0x%lx pte=0x%lx", (uintptr_t)ptep,
             (uintptr_t)ptep_ptep, (uintptr_t)ptep_ptep->pte);
 
-    pr_info("Before hook syscall %d, ptr=0x%lx, *ptr=0x%lx", nr,
-            (unsigned long)orig_p, (unsigned long)orig);
+    pr_info("Before hook syscall %d, ptr=0x%lx, *ptr=0x%lx -> 0x%lx", nr,
+            (unsigned long)orig_p, (unsigned long)orig, (uintptr_t)fn);
 
     pte = set_pte_bit(orig_pte, __pgprot(PTE_DBM));
     pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
     ksu_set_pte(ptep, pte);
     flush_tlb_all();
+    pr_info("Before hook modified pte=%lx",
+            (uintptr_t)pte_val(READ_ONCE(*ptep)));
 
     syscall_table[nr] = fn;
 
@@ -547,6 +549,8 @@ static void replace_syscall_table(int nr, syscall_fn_t fn, syscall_fn_t *old)
 
     pr_info("After hook syscall %d, ptr=0x%lx, *ptr=0x%lx", nr,
             (unsigned long)orig_p, (unsigned long)READ_ONCE(syscall_table[nr]));
+    pr_info("After hook modified pte=%lx",
+            (uintptr_t)pte_val(READ_ONCE(*ptep)));
 }
 
 static struct kprobe input_event_kp = {
