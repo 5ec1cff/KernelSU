@@ -17,7 +17,6 @@
 #include <linux/namei.h>
 #include <linux/workqueue.h>
 #include <linux/uio.h>
-#include <linux/of.h>
 #include <asm/syscall.h>
 #include <asm/cacheflush.h>
 #include "pte.h"
@@ -211,6 +210,8 @@ fail:
     return false;
 }
 
+static void stop_finit_module_hook();
+
 void ksu_handle_execveat_ksud(int *fd, const char *path,
                               struct user_arg_ptr *argv)
 {
@@ -228,6 +229,7 @@ void ksu_handle_execveat_ksud(int *fd, const char *path,
         if (!init_second_stage_executed &&
             check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
             pr_info("/system/bin/init second_stage executed\n");
+            stop_finit_module_hook();
             apply_kernelsu_rules();
             setup_ksu_cred();
             init_second_stage_executed = true;
@@ -482,6 +484,38 @@ static long ksu_sys_read(const struct pt_regs *regs)
     return orig_sys_read(regs);
 }
 
+static long (*orig_finit_module)(const struct pt_regs *regs);
+static long ksu_finit_module(const struct pt_regs *regs)
+{
+    // https://cs.android.com/android/platform/superproject/main/+/main:system/core/libmodprobe/libmodprobe_ext.cpp;l=53;drc=61197364367c9e404c7da6900658f1b16c42d0da
+    unsigned int fd = PT_REGS_PARM1(regs);
+    const char *name;
+
+    struct file *file = fget(fd);
+    if (!file) {
+        goto call_orig;
+    }
+
+    name = file->f_path.dentry->d_name.name;
+    pr_info("loading kernel module %s", name);
+
+    // Disable MTK's mkp kernel protection, which deny modifying kernel code and rodata with EL2.
+    // https://github.com/NothingOSS/android_kernel_device_modules_6.1_nothing_mt6878/blob/957dac185efe46cbf6336b0fff9516d84c8cd78f/drivers/misc/mediatek/mkp/mkp_demo.c#L179
+    if (strcmp(name, "mkp.ko") == 0) {
+        goto skip_load;
+    }
+
+    fput(file);
+
+call_orig:
+    return orig_finit_module(regs);
+
+skip_load:
+    fput(file);
+    pr_info("skip load %s", name);
+    return 0;
+}
+
 static int input_handle_event_handler_pre(struct kprobe *p,
                                           struct pt_regs *regs)
 {
@@ -576,6 +610,11 @@ static void stop_execve_hook()
     pr_info("unhook sys_execve\n");
 }
 
+static void stop_finit_module_hook()
+{
+    replace_syscall_table(__NR_finit_module, orig_finit_module, NULL);
+}
+
 static void stop_input_hook()
 {
     static bool input_hook_stopped = false;
@@ -591,28 +630,17 @@ static void stop_input_hook()
 void ksu_ksud_init()
 {
     int ret;
-    u32 mkp_policy;
-    struct device_node *node;
     syscall_table = kallsyms_lookup_name("sys_call_table");
 
     replace_syscall_table(__NR_execve, ksu_sys_execve, &orig_sys_execve);
     replace_syscall_table(__NR_read, ksu_sys_read, &orig_sys_read);
+    replace_syscall_table(__NR_finit_module, ksu_finit_module,
+                          &orig_finit_module);
 
     ret = register_kprobe(&input_event_kp);
     pr_info("ksud: input_event_kp: %d\n", ret);
 
     INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
-
-    node = of_find_node_by_path("/chosen");
-    if (node) {
-        if (of_property_read_u32(node, "mkp,policy", &mkp_policy) == 0) {
-            pr_info("mkp_policy: %x\n", mkp_policy);
-        } else {
-            pr_err("failed to find mkp property");
-        }
-    } else {
-        pr_err("failed to find mkp node");
-    }
 }
 
 void ksu_ksud_exit()
