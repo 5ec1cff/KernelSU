@@ -252,24 +252,27 @@ rm -f /data/adb/post-fs-data.d/post_ota.sh
 pub use android::*;
 
 fn parse_kmi(buffer: Vec<u8>) -> Result<String> {
-    let printable_strings: Vec<&str> = buffer
-        .split(|&b| b == 0)
-        .filter_map(|slice| std::str::from_utf8(slice).ok())
-        .filter(|s| s.chars().all(|c| c.is_ascii_graphic() || c == ' '))
-        .collect();
-
     let re =
-        Regex::new(r"(?:.* )?(\d+\.\d+)(?:\S+)?(android\d+)").context("Failed to compile regex")?;
-    for s in printable_strings {
-        if let Some(caps) = re.captures(s)
-            && let (Some(kernel_version), Some(android_version)) = (caps.get(1), caps.get(2))
-        {
-            let kmi = format!("{}-{}", android_version.as_str(), kernel_version.as_str());
-            return Ok(kmi);
+        Regex::new(r"(\d+\.\d+)(?:\S+)?(android\d+)").context("Failed to compile regex")?;
+    buffer.windows(3).enumerate().filter(|(_, x)| {
+        x[1] == b'.' && (x[0] == b'5' || x[0] == b'6') && (x[2] >= b'0' && x[2] <= b'9')
+    }).find_map(|(i, x)| {
+        let a = &buffer[i..buffer.len().min(i + 100)];
+        if let Some(e) = a.iter().position(|c| *c == 0) {
+            if let Ok(s) = std::str::from_utf8(&a[..e]) {
+                if let Some(caps) = re.captures(s) &&
+                    let (Some(kernel_version), Some(android_version)) = (caps.get(1), caps.get(2))
+                {
+                    return Some(format!("{}-{}", android_version.as_str(), kernel_version.as_str()));
+                }
+            }
         }
-    }
-    println!("- Failed to get KMI version");
-    bail!("Try to choose LKM manually")
+        return None;
+    })
+        .ok_or_else(|| {
+            println!("- Failed to get KMI version");
+            anyhow!("Try to choose LKM manually")
+        })
 }
 
 fn parse_kmi_from_kernel(kernel: &PathBuf) -> Result<String> {
