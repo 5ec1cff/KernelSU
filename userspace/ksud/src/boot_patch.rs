@@ -647,18 +647,11 @@ pub fn patch(args: BootPatchArgs) -> Result<()> {
         } else {
             #[cfg(target_os = "android")]
             {
-                println!("- Flashing new boot image");
-                // TODO: use ioctl
-                let status = Command::new("blockdev")
-                    .arg("--setrw")
-                    .arg(&boot_partition)
-                    .status()?;
-                ensure!(status.success(), "set boot device rw failed");
-                OpenOptions::new()
-                    .write(true)
-                    .truncate(false)
-                    .create(false)
-                    .open(&boot_partition)?
+                // We should not read and write boot dev at same time
+                tempfile::Builder::new()
+                    .prefix("KernelSU_tmp_boot")
+                    .tempfile()?
+                    .into_file()
             }
 
             #[cfg(not(target_os = "android"))]
@@ -668,8 +661,16 @@ pub fn patch(args: BootPatchArgs) -> Result<()> {
         patcher.patch(&mut output_file)?;
 
         #[cfg(target_os = "android")]
-        if flash && ota {
-            post_ota()?;
+        if flash {
+            println!("- Flashing new boot image");
+            // TODO: use ioctl
+            let mut dev = open_block_for_write(&boot_partition)?;
+            output_file.rewind()?;
+            std::io::copy(&mut output_file, &mut dev)?;
+
+            if ota {
+                post_ota()?;
+            }
         }
 
         println!("- Done!");
@@ -731,7 +732,7 @@ pub fn restore(args: BootRestoreArgs) -> Result<()> {
 
         #[cfg(target_os = "android")]
         {
-            output_to_file = flash;
+            output_to_file = !flash;
             if flash {
                 if image.is_some() {
                     bail!("Can't use image and --flash together")
@@ -850,18 +851,14 @@ pub fn restore(args: BootRestoreArgs) -> Result<()> {
         } else {
             #[cfg(target_os = "android")]
             {
-                println!("- Flashing new boot image");
-                // TODO: use ioctl
-                let status = Command::new("blockdev")
-                    .arg("--setrw")
-                    .arg(&boot_partition)
-                    .status()?;
-                ensure!(status.success(), "set boot device rw failed");
-                OpenOptions::new()
-                    .write(true)
-                    .truncate(false)
-                    .create(false)
-                    .open(&boot_partition)?
+                if stock_boot.is_some() {
+                    open_block_for_write(&boot_partition)?
+                } else {
+                    tempfile::Builder::new()
+                        .prefix("KernelSU_tmp_boot")
+                        .tempfile()?
+                        .into_file()
+                }
             }
 
             #[cfg(not(target_os = "android"))]
@@ -870,6 +867,9 @@ pub fn restore(args: BootRestoreArgs) -> Result<()> {
 
         #[cfg(target_os = "android")]
         if let Some(stock_boot) = stock_boot {
+            if flash {
+                println!("- Flashing stock boot image");
+            }
             let mut stock_boot = File::open(stock_boot)?;
             std::io::copy(&mut stock_boot, &mut output_file).context("copy out new boot failed")?;
             return Ok(());
@@ -895,6 +895,15 @@ pub fn restore(args: BootRestoreArgs) -> Result<()> {
             patcher.replace_ramdisk(Box::new(Cursor::new(new_cpio)), false);
         }
         patcher.patch(&mut output_file)?;
+
+        #[cfg(target_os = "android")]
+        if flash {
+            println!("- Flashing restored boot image");
+            let mut boot = open_block_for_write(&boot_partition)?;
+            output_file.rewind()?;
+            std::io::copy(&mut output_file, &mut boot)?;
+        }
+
         println!("- Done!");
         Ok(())
     };
@@ -913,4 +922,19 @@ fn map_file(file: &PathBuf) -> Result<Mmap> {
             .len(file.seek(SeekFrom::End(0))? as usize)
             .map(&file)?)
     }
+}
+
+#[cfg(target_os = "android")]
+fn open_block_for_write(block_dev: &String) -> Result<File> {
+    // TODO: use ioctl
+    let status = Command::new("blockdev")
+        .arg("--setrw")
+        .arg(&block_dev)
+        .status()?;
+    ensure!(status.success(), "set boot device rw failed");
+    Ok(OpenOptions::new()
+        .write(true)
+        .truncate(false)
+        .create(false)
+        .open(&block_dev)?)
 }
