@@ -14,20 +14,19 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-#[cfg(target_os = "android")]
-use std::process::Command;
 
 use crate::assets;
 
 #[cfg(target_os = "android")]
 mod android {
-    use std::fs::OpenOptions;
     use super::{PermissionsExt, Result};
     pub(super) use crate::defs::{BACKUP_FILENAME, KSU_BACKUP_DIR, KSU_BACKUP_FILE_PREFIX};
     use crate::utils;
     use android_bootimg::cpio::{Cpio, CpioEntry};
     use anyhow::{Context, anyhow, bail, ensure};
     use regex_lite::Regex;
+    use std::fs::{File, OpenOptions};
+    use std::os::fd::AsRawFd;
     use std::path::Path;
     use std::process::Command;
 
@@ -134,9 +133,10 @@ mod android {
             .truncate(false)
             .read(true)
             .write(false)
-            .open(&image)?;
+            .open(image)?;
 
-        std::io::copy(&mut source, &mut target_file).with_context(|| format!("backup to {target}"))?;
+        std::io::copy(&mut source, &mut target_file)
+            .with_context(|| format!("backup to {target}"))?;
 
         let backup_file = CpioEntry::regular(0o755, Box::new(sha1));
         cpio.add(BACKUP_FILENAME, backup_file)?;
@@ -254,6 +254,23 @@ rm -f /data/adb/post-fs-data.d/post_ota.sh
         std::fs::set_permissions(post_ota_sh, std::fs::Permissions::from_mode(0o755))?;
 
         Ok(())
+    }
+
+    pub(super) fn open_block_for_write(block_dev: &String) -> Result<File> {
+        let file = File::open(block_dev)?;
+        unsafe {
+            const BLKROSET: i32 = libc::_IO(0x12, 93);
+            let mut val: libc::c_int = 0;
+            if libc::ioctl(file.as_raw_fd(), BLKROSET, &raw mut val) != 0 {
+                bail!("Failed to set rw for {block_dev}: {}", *libc::__errno());
+            }
+        }
+
+        Ok(OpenOptions::new()
+            .write(true)
+            .truncate(false)
+            .create(false)
+            .open(block_dev)?)
     }
 }
 
@@ -663,7 +680,6 @@ pub fn patch(args: BootPatchArgs) -> Result<()> {
         #[cfg(target_os = "android")]
         if flash {
             println!("- Flashing new boot image");
-            // TODO: use ioctl
             let mut dev = open_block_for_write(&boot_partition)?;
             output_file.rewind()?;
             std::io::copy(&mut output_file, &mut dev)?;
@@ -733,10 +749,8 @@ pub fn restore(args: BootRestoreArgs) -> Result<()> {
         #[cfg(target_os = "android")]
         {
             output_to_file = !flash;
-            if flash {
-                if image.is_some() {
-                    bail!("Can't use image and --flash together")
-                }
+            if flash && image.is_some() {
+                bail!("Can't use image and --flash together")
             }
         }
 
@@ -922,19 +936,4 @@ fn map_file(file: &PathBuf) -> Result<Mmap> {
             .len(file.seek(SeekFrom::End(0))? as usize)
             .map(&file)?)
     }
-}
-
-#[cfg(target_os = "android")]
-fn open_block_for_write(block_dev: &String) -> Result<File> {
-    // TODO: use ioctl
-    let status = Command::new("blockdev")
-        .arg("--setrw")
-        .arg(&block_dev)
-        .status()?;
-    ensure!(status.success(), "set boot device rw failed");
-    Ok(OpenOptions::new()
-        .write(true)
-        .truncate(false)
-        .create(false)
-        .open(&block_dev)?)
 }
