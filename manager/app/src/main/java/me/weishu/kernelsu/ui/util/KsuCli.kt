@@ -240,8 +240,7 @@ fun runModuleAction(
 fun restoreBoot(
     onStdout: (String) -> Unit, onStderr: (String) -> Unit
 ): FlashResult {
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
-    val result = flashWithIO("${getKsuDaemonPath()} boot-restore -f --magiskboot $magiskboot", onStdout, onStderr)
+    val result = flashWithIO("${getKsuDaemonPath()} boot-restore --flash --stock", onStdout, onStderr)
     return FlashResult(result)
 }
 
@@ -286,12 +285,10 @@ fun installBoot(
         }
     }
 
-    val magiskboot = File(ksuApp.applicationInfo.nativeLibraryDir, "libmagiskboot.so")
-    var cmd = "boot-patch --magiskboot ${magiskboot.absolutePath}"
+    var cmd = "boot-patch"
 
     cmd += if (bootFile == null) {
-        // no boot.img, use -f to force install
-        " -f"
+        " --flash"
     } else {
         " -b ${bootFile.absolutePath}"
     }
