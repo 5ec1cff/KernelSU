@@ -21,6 +21,7 @@ use crate::assets;
 
 #[cfg(target_os = "android")]
 mod android {
+    use std::fs::OpenOptions;
     use super::{PermissionsExt, Result};
     pub(super) use crate::defs::{BACKUP_FILENAME, KSU_BACKUP_DIR, KSU_BACKUP_FILE_PREFIX};
     use crate::utils;
@@ -123,7 +124,19 @@ mod android {
         println!("- Backup stock boot image");
         // magiskboot cpio ramdisk.cpio 'add 0755 $BACKUP_FILENAME'
         let target = format!("{KSU_BACKUP_DIR}{filename}");
-        std::fs::copy(image, &target).with_context(|| format!("backup to {target}"))?;
+        let mut target_file = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&target)?;
+        let mut source = OpenOptions::new()
+            .create(false)
+            .truncate(false)
+            .read(true)
+            .write(false)
+            .open(&image)?;
+
+        std::io::copy(&mut source, &mut target_file).with_context(|| format!("backup to {target}"))?;
 
         let backup_file = CpioEntry::regular(0o755, Box::new(sha1));
         cpio.add(BACKUP_FILENAME, backup_file)?;
@@ -557,7 +570,7 @@ pub fn patch(args: BootPatchArgs) -> Result<()> {
                     && flash
                     && let Err(e) = do_backup(&mut cpio, boot_image_file.as_path())
                 {
-                    println!("- Backup stock image failed: {e}");
+                    println!("- Backup stock image failed: {e:?}");
                 }
             }
 
