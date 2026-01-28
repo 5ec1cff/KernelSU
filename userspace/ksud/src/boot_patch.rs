@@ -697,193 +697,200 @@ pub struct BootRestoreArgs {
 }
 
 pub fn restore(args: BootRestoreArgs) -> Result<()> {
-    let BootRestoreArgs {
-        boot: image,
-        out_name,
-        ..
-    } = args;
-    #[cfg(target_os = "android")]
-    let BootRestoreArgs {
-        flash,
-        partition,
-        stock,
-        ..
-    } = args;
+    let inner = move || -> Result<()> {
+        let BootRestoreArgs {
+            boot: image,
+            out_name,
+            ..
+        } = args;
+        #[cfg(target_os = "android")]
+        let BootRestoreArgs {
+            flash,
+            partition,
+            stock,
+            ..
+        } = args;
 
-    #[cfg(target_os = "android")]
-    let kmi = get_current_kmi().unwrap_or_default();
+        #[cfg(target_os = "android")]
+        let kmi = get_current_kmi().unwrap_or_default();
 
-    let output_to_file;
+        let output_to_file;
 
-    #[cfg(target_os = "android")]
-    {
-        output_to_file = flash;
-        if flash {
-            if image.is_some() {
-                bail!("Can't use image and --flash together")
+        #[cfg(target_os = "android")]
+        {
+            output_to_file = flash;
+            if flash {
+                if image.is_some() {
+                    bail!("Can't use image and --flash together")
+                }
             }
         }
-    }
 
-    #[cfg(not(target_os = "android"))]
-    {
-        output_to_file = true;
-    }
-
-    #[cfg(target_os = "android")]
-    let boot_partition;
-
-    #[cfg(target_os = "android")]
-    {
-        let slot_suffix = get_slot_suffix(false);
-        let boot_partition_name = choose_boot_partition(&kmi, false, &partition);
-        boot_partition = format!("/dev/block/by-name/{boot_partition_name}{slot_suffix}");
-
-        println!("- Bootdevice: {boot_partition}");
-    }
-
-    let boot_image_file = if let Some(image) = image {
-        ensure!(image.exists(), "boot image not found");
-        image
-    } else {
         #[cfg(not(target_os = "android"))]
         {
-            bail!("Please specify a boot image");
+            output_to_file = true;
         }
 
         #[cfg(target_os = "android")]
-        PathBuf::from(&boot_partition)
-    };
+        let boot_partition;
 
-    let bootimage_data = map_file(&boot_image_file)?;
-    let boot_image = BootImage::parse(&bootimage_data)?;
+        #[cfg(target_os = "android")]
+        {
+            let slot_suffix = get_slot_suffix(false);
+            let boot_partition_name = choose_boot_partition(&kmi, false, &partition);
+            boot_partition = format!("/dev/block/by-name/{boot_partition_name}{slot_suffix}");
 
-    let (mut cpio, vendor_ramdisk_idx) =
-        if let Some(ramdisk_image) = boot_image.get_blocks().get_ramdisk() {
-            if ramdisk_image.is_vendor_ramdisk() {
-                let (pos, target) = ramdisk_image
-                    .iter_vendor_ramdisk()
-                    .enumerate()
-                    .find(|entry| entry.1.get_name_raw() == b"")
-                    .or_else(|| {
-                        ramdisk_image
-                            .iter_vendor_ramdisk()
-                            .enumerate()
-                            .find(|entry| entry.1.get_name_raw() == b"init_boot")
-                    })
-                    .ok_or_else(|| anyhow!("No suitable vendor ramdisk entry found"))?;
+            println!("- Bootdevice: {boot_partition}");
+        }
 
-                let mut ramdisk = Vec::<u8>::new();
-                target.dump(&mut ramdisk, false)?;
-                (Cpio::load_from_data(ramdisk.as_slice())?, Some(pos))
-            } else {
-                let mut ramdisk = Vec::<u8>::new();
-                ramdisk_image.dump(&mut ramdisk, false)?;
-                (Cpio::load_from_data(ramdisk.as_slice())?, None)
-            }
+        let boot_image_file = if let Some(image) = image {
+            ensure!(image.exists(), "boot image not found");
+            image
         } else {
-            bail!("No compatible ramdisk found.")
+            #[cfg(not(target_os = "android"))]
+            {
+                bail!("Please specify a boot image");
+            }
+
+            #[cfg(target_os = "android")]
+            PathBuf::from(&boot_partition)
         };
-    let is_kernelsu_patched = cpio.exists("kernelsu.ko");
-    ensure!(is_kernelsu_patched, "boot image is not patched by KernelSU");
 
-    #[cfg(target_os = "android")]
-    let mut stock_boot = None;
+        let bootimage_data = map_file(&boot_image_file)?;
+        let boot_image = BootImage::parse(&bootimage_data)?;
 
-    #[cfg(target_os = "android")]
-    if let Some(backup_file) = cpio.entry_by_name(BACKUP_FILENAME) {
-        let sha = String::from_utf8(backup_file.data().unwrap().to_vec())?;
-        let sha = sha.trim();
-        let backup_path =
-            PathBuf::from(KSU_BACKUP_DIR).join(format!("{KSU_BACKUP_FILE_PREFIX}{sha}"));
-        if backup_path.is_file() {
-            println!("- Using backup file {}", backup_path.display());
-            stock_boot = Some(backup_path);
-        } else if stock {
-            bail!(
-                "Error: no stock boot image {} found!",
-                backup_path.display()
-            )
-        } else {
-            println!("- Warning: no backup {} found!", backup_path.display());
-        }
+        let (mut cpio, vendor_ramdisk_idx) =
+            if let Some(ramdisk_image) = boot_image.get_blocks().get_ramdisk() {
+                if ramdisk_image.is_vendor_ramdisk() {
+                    let (pos, target) = ramdisk_image
+                        .iter_vendor_ramdisk()
+                        .enumerate()
+                        .find(|entry| entry.1.get_name_raw() == b"")
+                        .or_else(|| {
+                            ramdisk_image
+                                .iter_vendor_ramdisk()
+                                .enumerate()
+                                .find(|entry| entry.1.get_name_raw() == b"init_boot")
+                        })
+                        .ok_or_else(|| anyhow!("No suitable vendor ramdisk entry found"))?;
 
-        if let Err(e) = clean_backup(sha) {
-            println!("- Warning: Cleanup backup image failed: {e}");
-        }
-    } else if stock {
-        bail!("Error: no stock boot image found!")
-    } else {
-        println!("- Backup info is absent!");
-    }
+                    let mut ramdisk = Vec::<u8>::new();
+                    target.dump(&mut ramdisk, false)?;
+                    (Cpio::load_from_data(ramdisk.as_slice())?, Some(pos))
+                } else {
+                    let mut ramdisk = Vec::<u8>::new();
+                    ramdisk_image.dump(&mut ramdisk, false)?;
+                    (Cpio::load_from_data(ramdisk.as_slice())?, None)
+                }
+            } else {
+                bail!("No compatible ramdisk found.")
+            };
+        let is_kernelsu_patched = cpio.exists("kernelsu.ko");
+        ensure!(is_kernelsu_patched, "boot image is not patched by KernelSU");
 
-    let mut output_file = if output_to_file {
-        // if image is specified, write to output file
-        let output_dir = std::env::current_dir()?;
-        let name = out_name.unwrap_or_else(|| {
-            let now = chrono::Utc::now();
-            format!("kernelsu_patched_{}.img", now.format("%Y%m%d_%H%M%S"))
-        });
-        let output_image = output_dir.join(name);
-        let output = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&output_image)?;
-        println!("- Output file is written to");
-        println!("- {}", output_image.display().to_string().trim_matches('"'));
-        output
-    } else {
         #[cfg(target_os = "android")]
-        {
-            println!("- Flashing new boot image");
-            // TODO: use ioctl
-            let status = Command::new("blockdev")
-                .arg("--setrw")
-                .arg(&boot_partition)
-                .status()?;
-            ensure!(status.success(), "set boot device rw failed");
-            OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .create(false)
-                .open(&boot_partition)?
+        let mut stock_boot = None;
+
+        #[cfg(target_os = "android")]
+        if let Some(backup_file) = cpio.entry_by_name(BACKUP_FILENAME) {
+            let sha = String::from_utf8(backup_file.data().unwrap().to_vec())?;
+            let sha = sha.trim();
+            let backup_path =
+                PathBuf::from(KSU_BACKUP_DIR).join(format!("{KSU_BACKUP_FILE_PREFIX}{sha}"));
+            if backup_path.is_file() {
+                println!("- Using backup file {}", backup_path.display());
+                stock_boot = Some(backup_path);
+            } else if stock {
+                bail!(
+                    "Error: no stock boot image {} found!",
+                    backup_path.display()
+                )
+            } else {
+                println!("- Warning: no backup {} found!", backup_path.display());
+            }
+
+            if let Err(e) = clean_backup(sha) {
+                println!("- Warning: Cleanup backup image failed: {e}");
+            }
+        } else if stock {
+            bail!("Error: no stock boot image found!")
+        } else {
+            println!("- Backup info is absent!");
         }
 
-        #[cfg(not(target_os = "android"))]
-        unreachable!()
+        let mut output_file = if output_to_file {
+            // if image is specified, write to output file
+            let output_dir = std::env::current_dir()?;
+            let name = out_name.unwrap_or_else(|| {
+                let now = chrono::Utc::now();
+                format!("kernelsu_patched_{}.img", now.format("%Y%m%d_%H%M%S"))
+            });
+            let output_image = output_dir.join(name);
+            let output = OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(&output_image)?;
+            println!("- Output file is written to");
+            println!("- {}", output_image.display().to_string().trim_matches('"'));
+            output
+        } else {
+            #[cfg(target_os = "android")]
+            {
+                println!("- Flashing new boot image");
+                // TODO: use ioctl
+                let status = Command::new("blockdev")
+                    .arg("--setrw")
+                    .arg(&boot_partition)
+                    .status()?;
+                ensure!(status.success(), "set boot device rw failed");
+                OpenOptions::new()
+                    .write(true)
+                    .truncate(false)
+                    .create(false)
+                    .open(&boot_partition)?
+            }
+
+            #[cfg(not(target_os = "android"))]
+            unreachable!()
+        };
+
+        #[cfg(target_os = "android")]
+        if let Some(stock_boot) = stock_boot {
+            let mut stock_boot = File::open(stock_boot)?;
+            std::io::copy(&mut stock_boot, &mut output_file).context("copy out new boot failed")?;
+            return Ok(());
+        }
+
+        println!("- Removing KernelSU from boot image");
+        // remove kernelsu.ko
+        cpio.rm("kernelsu.ko", false);
+
+        // if init.real exists, restore it
+        if cpio.exists("init.real") {
+            cpio.mv("init.real", "init")?;
+        }
+
+        let mut new_cpio = Vec::<u8>::new();
+        cpio.dump(&mut new_cpio)?;
+        println!("- Repacking boot image");
+
+        let mut patcher = BootImagePatchOption::new(&boot_image);
+        if let Some(idx) = vendor_ramdisk_idx {
+            patcher.replace_vendor_ramdisk(idx, Box::new(Cursor::new(new_cpio)), false);
+        } else {
+            patcher.replace_ramdisk(Box::new(Cursor::new(new_cpio)), false);
+        }
+        patcher.patch(&mut output_file)?;
+        println!("- Done!");
+        Ok(())
     };
 
-    #[cfg(target_os = "android")]
-    if let Some(stock_boot) = stock_boot {
-        let mut stock_boot = File::open(stock_boot)?;
-        std::io::copy(&mut stock_boot, &mut output_file).context("copy out new boot failed")?;
-        return Ok(());
+    let result = inner();
+    if let Err(ref e) = result {
+        println!("- Restore Error: {e}");
     }
-
-    println!("- Removing KernelSU from boot image");
-    // remove kernelsu.ko
-    cpio.rm("kernelsu.ko", false);
-
-    // if init.real exists, restore it
-    if cpio.exists("init.real") {
-        cpio.mv("init.real", "init")?;
-    }
-
-    let mut new_cpio = Vec::<u8>::new();
-    cpio.dump(&mut new_cpio)?;
-    println!("- Repacking boot image");
-
-    let mut patcher = BootImagePatchOption::new(&boot_image);
-    if let Some(idx) = vendor_ramdisk_idx {
-        patcher.replace_vendor_ramdisk(idx, Box::new(Cursor::new(new_cpio)), false);
-    } else {
-        patcher.replace_ramdisk(Box::new(Cursor::new(new_cpio)), false);
-    }
-    patcher.patch(&mut output_file)?;
-
-    println!("- Done!");
-    Ok(())
+    result
 }
 
 fn map_file(file: &PathBuf) -> Result<Mmap> {
