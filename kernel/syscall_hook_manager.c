@@ -17,7 +17,6 @@
 #include "sucompat.h"
 #include "setuid_hook.h"
 #include "selinux/selinux.h"
-#include "util.h"
 #include "ksud.h"
 
 // Tracepoint registration count management
@@ -251,7 +250,6 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
     char path[64];
     unsigned long addr;
     const char __user *fn;
-    long ret;
 
     if (unlikely(!filename_user))
         return 0;
@@ -260,11 +258,7 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
     fn = (const char __user *)addr;
 
     memset(path, 0, sizeof(path));
-    ret = strncpy_from_user_nofault(path, fn, sizeof(path));
-    if (ret < 0 && try_set_access_flag(addr)) {
-        ret = strncpy_from_user_nofault(path, fn, sizeof(path));
-        pr_info("ksu_handle_init_mark_tracker: %ld\n", ret);
-    }
+    strncpy_from_user(path, fn, sizeof(path));
 
     if (unlikely(strcmp(path, KSUD_PATH) == 0)) {
         pr_info("hook_manager: escape to root for init executing ksud: %d\n",
