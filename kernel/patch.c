@@ -6,9 +6,10 @@
 #include "hook.h"
 #include "syscall_hook_manager.h"
 
-extern void ksu_syscall_trace_enter_call_trace_sys_enter_hook_trampoline();
-extern void
-ksu_syscall_trace_enter_call_trace_sys_enter_hook_trampoline_to_original();
+// We should not declare them as function so that they won't be converted to .cfi_jt when accessing them in C code.
+extern char ksu_syscall_trace_enter_call_trace_sys_enter_hook_trampoline[];
+extern char
+    ksu_syscall_trace_enter_call_trace_sys_enter_hook_trampoline_to_original[];
 
 void *find_hook_point()
 {
