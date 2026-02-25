@@ -66,7 +66,7 @@ static void disable_seccomp(void)
 {
     struct task_struct *fake;
 
-    fake = kmalloc(sizeof(*fake), GFP_ATOMIC);
+    fake = kmalloc(sizeof(*fake), GFP_KERNEL);
     if (!fake) {
         pr_warn("failed to alloc fake task_struct\n");
         return;
