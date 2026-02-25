@@ -14,7 +14,6 @@ kernelsu-objs += feature.o
 kernelsu-objs += ksud.o
 kernelsu-objs += seccomp_cache.o
 kernelsu-objs += file_wrapper.o
-kernelsu-objs += util.o
 kernelsu-objs += pte.o
 kernelsu-objs += patch.o
 kernelsu-objs += inline_hook.o
