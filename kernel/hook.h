@@ -67,7 +67,7 @@ int32_t branch_absolute(uint32_t *buf, uint64_t addr);
 int32_t ret_absolute(uint32_t *buf, uint64_t addr);
 
 hook_err_t hook_prepare(hook_t *hook);
-void hook_install(hook_t *hook);
+int hook_install(hook_t *hook);
 
 /**
  * @brief Inline-hook function which address is @param func with function @param replace, 
@@ -84,5 +84,7 @@ void hook_install(hook_t *hook);
  * @return hook_err_t 
  */
 hook_err_t hook(void *func, void *replace, void **backup);
+
+int ksu_patch_text(void *dst, void *src, size_t len);
 
 #endif
