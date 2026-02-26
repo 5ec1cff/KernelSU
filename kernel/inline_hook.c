@@ -2,10 +2,15 @@
 /* 
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
+#include "asm/patching.h"
 #include "hook.h"
 #include "klog.h" // IWYU pragma: keep
+#include "linux/compiler.h"
+#include "linux/cpumask.h"
 #include "linux/gfp.h" // IWYU pragma: keep
 #include "linux/vmalloc.h"
+#include "linux/stop_machine.h"
+#include "asm/cacheflush.h"
 
 #include "asm/pgtable.h"
 
@@ -436,13 +441,10 @@ hook_err_t hook_prepare(hook_t *hook)
     return HOOK_NO_ERR;
 }
 
-void hook_install(hook_t *hook)
+int hook_install(hook_t *hook)
 {
-    void *addrs[TRAMPOLINE_MAX_NUM];
-    for (int32_t i = 0; i < hook->tramp_insts_num; ++i) {
-        addrs[i] = (uint32_t *)hook->origin_addr + i;
-    }
-    aarch64_insn_patch_text(addrs, hook->tramp_insts, hook->tramp_insts_num);
+    return ksu_patch_text(hook->origin_addr, hook->tramp_insts,
+                          hook->tramp_insts_num * 4);
 }
 
 hook_err_t hook(void *func, void *replace, void **backup)
@@ -472,11 +474,103 @@ hook_err_t hook(void *func, void *replace, void **backup)
     err = hook_prepare(hook);
     if (err)
         goto out;
-    hook_install(hook);
-    pr_info("Hook func: %llx success\n", hook->func_addr);
+    int e = hook_install(hook);
+    if (e) {
+        pr_info("Hook func: %llx err %d\n", hook->func_addr, e);
+    } else {
+        pr_info("Hook func: %llx success\n", hook->func_addr);
+    }
     return HOOK_NO_ERR;
 out:
     vunmap(hook);
     pr_err("Hook func: %llx failed, err: %d\n", hook->func_addr, err);
     return err;
+}
+
+struct patch_text_info {
+    void *dst;
+    void *src;
+    size_t len;
+    atomic_t cpu_count;
+};
+
+static int ksu_patch_text_nosync(void *dst, void *src, size_t len)
+{
+    unsigned long start = dst, end = start + len, p = start, q, sp = src;
+    union {
+        u64 u64buf;
+        u8 u8buf[8];
+    } buf;
+    int ret = 0;
+
+    if (unlikely(start & 7)) {
+        p = start & ~7;
+        q = end - 1;
+        if ((q & ~7) != p) {
+            q = p + 7;
+        }
+        q = q - p + 1;
+        buf.u64buf = *(u64 *)p;
+        __builtin_memcpy(&buf.u8buf[start & 7], sp, q);
+        sp += q;
+        ret = aarch64_addr_write((void *)p, buf.u64buf);
+        p += q;
+        if (ret)
+            goto err;
+    }
+
+    q = end & ~7;
+
+    for (; p < q; p += 8, sp += 8) {
+        ret = aarch64_addr_write((void *)p, *(u64 *)sp);
+        if (ret)
+            goto err;
+    }
+
+    if (unlikely(p != end)) {
+        q = end - p;
+        buf.u64buf = *(u64 *)p;
+        __builtin_memcpy(buf.u8buf, sp, q);
+        ret = aarch64_addr_write((void *)p, buf.u64buf);
+    }
+
+    if (!ret)
+        caches_clean_inval_pou((uintptr_t)dst, (uintptr_t)dst + len);
+
+err:
+    return ret;
+}
+
+static int ksu_patch_text_cb(void *arg)
+{
+    struct patch_text_info *pp = arg;
+    void *dst = pp->dst, *src = pp->src;
+    size_t len = pp->len;
+
+    int ret = 0;
+
+    /* The last CPU becomes master */
+    if (atomic_inc_return(&pp->cpu_count) == num_online_cpus()) {
+        ret = ksu_patch_text_nosync(dst, src, len);
+        /* Notify other processors with an additional increment. */
+        atomic_inc(&pp->cpu_count);
+    } else {
+        while (atomic_read(&pp->cpu_count) <= num_online_cpus())
+            cpu_relax();
+        isb();
+    }
+
+    return ret;
+}
+
+int ksu_patch_text(void *dst, void *src, size_t len)
+{
+    struct patch_text_info info = {
+        .dst = dst,
+        .src = src,
+        .len = len,
+        .cpu_count = ATOMIC_INIT(0),
+    };
+
+    return stop_machine_cpuslocked(ksu_patch_text_cb, &info, cpu_online_mask);
 }
