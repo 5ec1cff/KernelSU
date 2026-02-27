@@ -2,7 +2,6 @@
 /* 
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
-#include "asm/patching.h"
 #include "hook.h"
 #include "klog.h" // IWYU pragma: keep
 #include "linux/compiler.h"
@@ -444,7 +443,8 @@ hook_err_t hook_prepare(hook_t *hook)
 int hook_install(hook_t *hook)
 {
     return ksu_patch_text(hook->origin_addr, hook->tramp_insts,
-                          hook->tramp_insts_num * 4);
+                          hook->tramp_insts_num * 4,
+                          KSU_PATCH_TEXT_FLUSH_ICACHE);
 }
 
 hook_err_t hook(void *func, void *replace, void **backup)
@@ -487,57 +487,86 @@ out:
     return err;
 }
 
+// This function appears in 5.14:
+// https://github.com/torvalds/linux/commit/fade9c2c6ee2baea7df8e6059b3f143c681e5ce4#diff-fc9ef24572e183c6c049b5ae8029762159787f8669d909452bdf40db748f94a7L52
+// https://github.com/torvalds/linux/commit/814b186079cd54d3fe3b6b8ab539cbd44705ef9d#diff-fc9ef24572e183c6c049b5ae8029762159787f8669d909452bdf40db748f94a7R53
+// However, it's backport to android13-5.10 but not to android12-5.10.
+// https://cs.android.com/android/_/android/kernel/common/+/6d9f07d8f1ffc310a6877153fe882f35ae380799
+// So we need to grep kernel source code to detect which one to use.
+#if KSU_NEW_DCACHE_FLUSH
+#define ksu_flush_dcache(start, sz)                                            \
+    ({                                                                         \
+        unsigned long __start = (start);                                       \
+        unsigned long __end = __start + (sz);                                  \
+        dcache_clean_inval_poc(__start, __end);                                \
+    })
+#define ksu_flush_icache(start, end) caches_clean_inval_pou
+#else
+#define ksu_flush_dcache(start, sz) __flush_dcache_area((void *)start, sz)
+#define ksu_flush_icache(start, end) __flush_icache_range
+#endif
+
 struct patch_text_info {
     void *dst;
     void *src;
     size_t len;
     atomic_t cpu_count;
+    int flags;
 };
 
-static int ksu_patch_text_nosync(void *dst, void *src, size_t len)
+static int ksu_patch_text_nosync(void *dst, void *src, size_t len, int flags)
 {
-    unsigned long start = dst, end = start + len, p = start, q, sp = src;
-    union {
-        u64 u64buf;
-        u8 u8buf[8];
-    } buf;
-    int ret = 0;
+    pr_info("patch dst=0x%lx src=0x%lx len=%ld\n", (unsigned long)dst,
+            (unsigned long)src, len);
+    unsigned long start = dst, end = start + len, p = (start + 3) & ~3,
+                  pe = end & ~3, sp = src;
+    int ret;
 
-    if (unlikely(start & 7)) {
-        p = start & ~7;
-        q = end - 1;
-        if ((q & ~7) != p) {
-            q = p + 7;
+    if (unlikely(start != p)) {
+        uint8_t buf[4];
+        unsigned long s = start & ~3, l, off = start & 3;
+        if (((end - 1) & ~3) == s) {
+            l = len;
+        } else {
+            l = 4 - off;
         }
-        q = q - p + 1;
-        buf.u64buf = *(u64 *)p;
-        __builtin_memcpy(&buf.u8buf[start & 7], sp, q);
-        sp += q;
-        ret = aarch64_addr_write((void *)p, buf.u64buf);
-        p += q;
+        __builtin_memcpy(buf, dst, 4);
+        __builtin_memcpy(buf + off, src, l);
+        pr_info("write to 0x%lx: %08x (off=%ld,len=%ld)\n", s, *(u32 *)buf, off,
+                l);
+        ret = aarch64_insn_write((void *)s, *(u32 *)buf);
+        sp += l;
         if (ret)
             goto err;
     }
 
-    q = end & ~7;
-
-    for (; p < q; p += 8, sp += 8) {
-        ret = aarch64_addr_write((void *)p, *(u64 *)sp);
+    for (; p < pe; p += 4, sp += 4) {
+        pr_info("write to 0x%lx: %08x\n", p, *(u32 *)sp);
+        ret = aarch64_insn_write((void *)p, *(u32 *)sp);
         if (ret)
             goto err;
     }
 
-    if (unlikely(p != end)) {
-        q = end - p;
-        buf.u64buf = *(u64 *)p;
-        __builtin_memcpy(buf.u8buf, sp, q);
-        ret = aarch64_addr_write((void *)p, buf.u64buf);
+    if (unlikely(p < end)) {
+        uint8_t buf[4];
+        size_t l = end - p;
+        __builtin_memcpy(buf, p, 4);
+        __builtin_memcpy(buf, sp, l);
+        pr_info("write to 0x%lx: %08x (len=%ld)\n", p, *(u32 *)buf, l);
+        ret = aarch64_insn_write(p, *(u32 *)buf);
+        if (ret)
+            goto err;
     }
 
-    if (!ret)
-        caches_clean_inval_pou((uintptr_t)dst, (uintptr_t)dst + len);
+    if (!ret) {
+        if (flags & KSU_PATCH_TEXT_FLUSH_ICACHE)
+            ksu_flush_icache((uintptr_t)dst, (uintptr_t)dst + len);
+        if (flags & KSU_PATCH_TEXT_FLUSH_DCACHE)
+            ksu_flush_dcache(dst, len);
+    }
 
 err:
+    pr_info("patch result=%d\n", ret);
     return ret;
 }
 
@@ -546,12 +575,13 @@ static int ksu_patch_text_cb(void *arg)
     struct patch_text_info *pp = arg;
     void *dst = pp->dst, *src = pp->src;
     size_t len = pp->len;
+    int flags = pp->flags;
 
     int ret = 0;
 
     /* The last CPU becomes master */
     if (atomic_inc_return(&pp->cpu_count) == num_online_cpus()) {
-        ret = ksu_patch_text_nosync(dst, src, len);
+        ret = ksu_patch_text_nosync(dst, src, len, flags);
         /* Notify other processors with an additional increment. */
         atomic_inc(&pp->cpu_count);
     } else {
@@ -563,13 +593,14 @@ static int ksu_patch_text_cb(void *arg)
     return ret;
 }
 
-int ksu_patch_text(void *dst, void *src, size_t len)
+int ksu_patch_text(void *dst, void *src, size_t len, int flags)
 {
     struct patch_text_info info = {
         .dst = dst,
         .src = src,
         .len = len,
         .cpu_count = ATOMIC_INIT(0),
+        .flags = flags,
     };
 
     return stop_machine_cpuslocked(ksu_patch_text_cb, &info, cpu_online_mask);

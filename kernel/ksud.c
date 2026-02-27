@@ -19,7 +19,7 @@
 #include <linux/uio.h>
 #include <asm/syscall.h>
 #include <asm/cacheflush.h>
-#include "pte.h"
+#include "hook.h"
 
 #include "manager.h"
 #include "allowlist.h"
@@ -207,8 +207,6 @@ fail:
     return false;
 }
 
-static void stop_finit_module_hook();
-
 void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
 {
     static const char app_process[] = "/system/bin/app_process";
@@ -225,7 +223,6 @@ void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
         if (!init_second_stage_executed &&
             check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
             pr_info("/system/bin/init second_stage executed\n");
-            stop_finit_module_hook();
             apply_kernelsu_rules();
             cache_sid();
             setup_ksu_cred();
@@ -530,36 +527,6 @@ static long ksu_sys_fstat(const struct pt_regs *regs)
     return ret;
 }
 
-static long (*orig_finit_module)(const struct pt_regs *regs);
-static long ksu_finit_module(const struct pt_regs *regs)
-{
-    // https://cs.android.com/android/platform/superproject/main/+/main:system/core/libmodprobe/libmodprobe_ext.cpp;l=53;drc=61197364367c9e404c7da6900658f1b16c42d0da
-    unsigned int fd = PT_REGS_PARM1(regs);
-    const char *name;
-
-    struct file *file = fget(fd);
-    if (!file) {
-        goto call_orig;
-    }
-
-    name = file->f_path.dentry->d_name.name;
-    pr_info("loading kernel module %s", name);
-
-    if (strcmp(name, "mkp.ko") == 0) {
-        goto skip_load;
-    }
-
-    fput(file);
-
-call_orig:
-    return orig_finit_module(regs);
-
-skip_load:
-    fput(file);
-    pr_info("skip load %s", name);
-    return 0;
-}
-
 static int input_handle_event_handler_pre(struct kprobe *p,
                                           struct pt_regs *regs)
 {
@@ -569,67 +536,26 @@ static int input_handle_event_handler_pre(struct kprobe *p,
     return ksu_handle_input_handle_event(type, code, value);
 }
 
-// This function appears in 5.14:
-// https://github.com/torvalds/linux/commit/fade9c2c6ee2baea7df8e6059b3f143c681e5ce4#diff-fc9ef24572e183c6c049b5ae8029762159787f8669d909452bdf40db748f94a7L52
-// https://github.com/torvalds/linux/commit/814b186079cd54d3fe3b6b8ab539cbd44705ef9d#diff-fc9ef24572e183c6c049b5ae8029762159787f8669d909452bdf40db748f94a7R53
-// However, it's backport to android13-5.10 but not to android12-5.10.
-// https://cs.android.com/android/_/android/kernel/common/+/6d9f07d8f1ffc310a6877153fe882f35ae380799
-// So we need to grep kernel source code to detect which one to use.
-#if KSU_NEW_DCACHE_FLUSH
-#define ksu_flush_dcache(start, sz)                                            \
-    ({                                                                         \
-        unsigned long __start = (start);                                       \
-        unsigned long __end = __start + (sz);                                  \
-        dcache_clean_inval_poc(__start, __end);                                \
-    })
-#else
-#define ksu_flush_dcache(start, sz) __flush_dcache_area((void *)start, sz)
-#endif
-
 static syscall_fn_t *syscall_table = NULL;
 
 static void replace_syscall_table(int nr, syscall_fn_t fn, syscall_fn_t *old)
 {
-    pte_t orig_pte, pte;
-    pte_t *ptep = page_from_virt((uintptr_t)&syscall_table[nr]);
-    if (ptep == NULL) {
-        pr_err("Failed to get PTE for syscall_table[%d]\n", nr);
-        return;
-    }
-    pr_info("syscall 0x%lx ptep=0x%lx pte=0x%lx", (uintptr_t)&syscall_table[nr],
-            (uintptr_t)ptep, (uintptr_t)ptep->pte);
+    pr_info("syscall 0x%lx ", (uintptr_t)&syscall_table[nr]);
     syscall_fn_t *orig_p = &syscall_table[nr], orig = READ_ONCE(*orig_p);
-    orig_pte = READ_ONCE(*ptep);
     if (old) {
         *old = orig;
-        dmb(ishst);
     }
-
-    pte_t *ptep_ptep = page_from_virt((uintptr_t)ptep);
-    pr_info("syscall_ptep 0x%lx ptep=0x%lx pte=0x%lx", (uintptr_t)ptep,
-            (uintptr_t)ptep_ptep, (uintptr_t)ptep_ptep->pte);
 
     pr_info("Before hook syscall %d, ptr=0x%lx, *ptr=0x%lx -> 0x%lx", nr,
             (unsigned long)orig_p, (unsigned long)orig, (uintptr_t)fn);
 
-    pte = set_pte_bit(orig_pte, __pgprot(PTE_DBM));
-    pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
-    ksu_set_pte(ptep, pte);
-    flush_tlb_all();
-    pr_info("Before hook modified pte=%lx",
-            (uintptr_t)pte_val(READ_ONCE(*ptep)));
-
-    syscall_table[nr] = fn;
-
-    ksu_set_pte(ptep, orig_pte);
-    flush_tlb_all();
-
-    ksu_flush_dcache(&syscall_table[nr], sizeof(void *));
+    if (ksu_patch_text(&syscall_table[nr], &fn, sizeof(fn),
+                       KSU_PATCH_TEXT_FLUSH_DCACHE)) {
+        pr_err("patch syscall %d failed", nr);
+    }
 
     pr_info("After hook syscall %d, ptr=0x%lx, *ptr=0x%lx", nr,
             (unsigned long)orig_p, (unsigned long)READ_ONCE(syscall_table[nr]));
-    pr_info("After hook modified pte=%lx",
-            (uintptr_t)pte_val(READ_ONCE(*ptep)));
 }
 
 static struct kprobe input_event_kp = {
@@ -655,11 +581,6 @@ static void stop_execve_hook()
     pr_info("unhook sys_execve\n");
 }
 
-static void stop_finit_module_hook()
-{
-    replace_syscall_table(__NR_finit_module, orig_finit_module, NULL);
-}
-
 static void stop_input_hook()
 {
     static bool input_hook_stopped = false;
@@ -680,8 +601,6 @@ void ksu_ksud_init()
     replace_syscall_table(__NR_execve, ksu_sys_execve, &orig_sys_execve);
     replace_syscall_table(__NR_read, ksu_sys_read, &orig_sys_read);
     replace_syscall_table(__NR_fstat, ksu_sys_fstat, &orig_sys_fstat);
-    replace_syscall_table(__NR_finit_module, ksu_finit_module,
-                          &orig_finit_module);
 
     ret = register_kprobe(&input_event_kp);
     pr_info("ksud: input_event_kp: %d\n", ret);
