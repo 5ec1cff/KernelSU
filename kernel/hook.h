@@ -85,6 +85,9 @@ int hook_install(hook_t *hook);
  */
 hook_err_t hook(void *func, void *replace, void **backup);
 
-int ksu_patch_text(void *dst, void *src, size_t len);
+#define KSU_PATCH_TEXT_FLUSH_DCACHE 1
+#define KSU_PATCH_TEXT_FLUSH_ICACHE 2
+
+int ksu_patch_text(void *dst, void *src, size_t len, int flags);
 
 #endif
