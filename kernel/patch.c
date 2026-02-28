@@ -11,6 +11,14 @@ extern char ksu_syscall_trace_enter_call_trace_sys_enter_hook_trampoline[];
 extern char
     ksu_syscall_trace_enter_call_trace_sys_enter_hook_trampoline_to_original[];
 
+// The function `syscall_trace_enter` calls `trace_sys_enter`, which declares a static call to
+// the tracepoint logic. This static call leaves a `nop` instruction, which is patched into a
+// `b` instruction when the static call is enabled, thus jumping to the corresponding logic. We
+// can find the jump target in `jump_table` and hook it, allowing us to run code at the system
+// call entry point of the tagged process without entering the atomic context of the tracepoint.
+// This significantly reduces overhead and prevents side-channel detections (which is why
+// tracepoints were used previously). Note: We still need to register the tracepoint callback
+// function to enable its static call.
 void *find_hook_point()
 {
     unsigned long addr, size, p;
