@@ -44,6 +44,8 @@ def gen_compile_commands(cmd_file_search_path, out_dir):
 
     if not cmd_file_search_path:
         cmd_file_search_path = [out_dir]
+    else:
+        cmd_file_search_path += [out_dir]
 
     cmd_files = []
     for search_path in cmd_file_search_path:
