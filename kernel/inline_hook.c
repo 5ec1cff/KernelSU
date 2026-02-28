@@ -585,5 +585,5 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
         .flags = flags,
     };
 
-    return stop_machine_cpuslocked(ksu_patch_text_cb, &info, cpu_online_mask);
+    return stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
 }
