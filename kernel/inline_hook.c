@@ -517,6 +517,24 @@ struct patch_text_info {
     int flags;
 };
 
+// Implementation of arbitrary kernel address modification.
+// We could certainly modify the PTE of the target address to make it writable,
+// but this would violate the protection mechanisms of some vendor components
+// (such as MTK's MKP, see ^1) at higher EL levels. Fortunately, the kernel's
+// `aarch64_insn_write` function works fine, which I believe is achieved by
+// modifying memory using fixmaps (MKP's kernel module reports the fixmap address
+// to its hypervisor, which might be used to determine whether such memory
+// modification is "normal" kernel behavior, see ^1). However, we cannot use the
+// `aarch64_insn_write` function directly. First, it can only write 4 bytes
+// at a time. Secondly, there's a bug in modifying the kernel's rodata (in our
+// case, syscall table). The `patch_map` function uses `vmalloc_to_page` to
+// obtain the target's physical address, but `vmalloc_to_page` doesn't handle
+// huge page mapping correctly (before version 5.13, see ^2).
+// Therefore, we need to obtain the target's physical address and use `fixmap` to
+// map and poke it manually. Currently, no patch_lock is held, since I think it's
+// not a big problem because we are in stop_machine.
+// ^1: https://github.com/NothingOSS/android_kernel_device_modules_6.1_nothing_mt6878/blob/957dac185efe46cbf6336b0fff9516d84c8cd78f/drivers/misc/mediatek/mkp/mkp_main.c#L29
+// ^2: https://github.com/torvalds/linux/commit/c0eb315ad9719e41ce44708455cc69df7ac9f3f8
 static int ksu_patch_text_nosync(void *dst, void *src, size_t len, int flags)
 {
     pr_info("patch dst=0x%lx src=0x%lx len=%ld\n", (unsigned long)dst,
