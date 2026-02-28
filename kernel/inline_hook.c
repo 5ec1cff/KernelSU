@@ -7,11 +7,14 @@
 #include "linux/compiler.h"
 #include "linux/cpumask.h"
 #include "linux/gfp.h" // IWYU pragma: keep
+#include "linux/uaccess.h"
 #include "linux/vmalloc.h"
 #include "linux/stop_machine.h"
 #include "asm/cacheflush.h"
-
+#include "asm-generic/fixmap.h"
 #include "asm/pgtable.h"
+
+#include "pte.h"
 
 // https://github.com/bmax121/KernelPatch/blob/94e5be9cc3f8a6fbd9574155e3e9753200ab9bfb/kernel/base/hook.c#L562-L603
 
@@ -518,45 +521,24 @@ static int ksu_patch_text_nosync(void *dst, void *src, size_t len, int flags)
 {
     pr_info("patch dst=0x%lx src=0x%lx len=%ld\n", (unsigned long)dst,
             (unsigned long)src, len);
-    unsigned long start = dst, end = start + len, p = (start + 3) & ~3,
-                  pe = end & ~3, sp = src;
+
+    unsigned long p = (unsigned long)dst;
     int ret;
 
-    if (unlikely(start != p)) {
-        uint8_t buf[4];
-        unsigned long s = start & ~3, l, off = start & 3;
-        if (((end - 1) & ~3) == s) {
-            l = len;
-        } else {
-            l = 4 - off;
-        }
-        __builtin_memcpy(buf, dst, 4);
-        __builtin_memcpy(buf + off, src, l);
-        pr_info("write to 0x%lx: %08x (off=%ld,len=%ld)\n", s, *(u32 *)buf, off,
-                l);
-        ret = aarch64_insn_write((void *)s, *(u32 *)buf);
-        sp += l;
-        if (ret)
-            goto err;
+    unsigned long phy = phys_from_virt(p);
+    if (!phy) {
+        ret = -ENOENT;
+        pr_err("failed to found phy addr for patch dst addr 0x%lx\n", p);
+        goto err;
     }
+    pr_info("phy addr for patch 0x%lx: 0x%lx\n", p, phy);
 
-    for (; p < pe; p += 4, sp += 4) {
-        pr_info("write to 0x%lx: %08x\n", p, *(u32 *)sp);
-        ret = aarch64_insn_write((void *)p, *(u32 *)sp);
-        if (ret)
-            goto err;
-    }
+    void *map = set_fixmap_offset(FIX_TEXT_POKE0, phy);
+    pr_info("fixmap addr for patch 0x%lx: 0x%lx\n", p, (unsigned long)map);
 
-    if (unlikely(p < end)) {
-        uint8_t buf[4];
-        size_t l = end - p;
-        __builtin_memcpy(buf, p, 4);
-        __builtin_memcpy(buf, sp, l);
-        pr_info("write to 0x%lx: %08x (len=%ld)\n", p, *(u32 *)buf, l);
-        ret = aarch64_insn_write(p, *(u32 *)buf);
-        if (ret)
-            goto err;
-    }
+    ret = (int)copy_to_kernel_nofault(map, src, len);
+
+    clear_fixmap(FIX_TEXT_POKE0);
 
     if (!ret) {
         if (flags & KSU_PATCH_TEXT_FLUSH_ICACHE)
