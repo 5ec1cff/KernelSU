@@ -31,6 +31,21 @@ jobs:
 
         cd kernel
 
+        if [[ "${{ inputs.kmi }}" == *"5.1"* ]]; then
+          echo "=== fix modpost ==="
+          sed -i '/s->module = exp->module;/s/^/\/\//' /opt/ddk/src/*/scripts/mod/modpost.c
+          pushd /opt/ddk/kdir/*
+          CMD_O=$(grep  'cmd_scripts/mod/modpost.o := ' scripts/mod/.modpost.o.cmd | sed 's/cmd_scripts\/mod\/modpost.o := //g')
+          CMD_2=$(grep  'cmd_scripts/mod/file2alias.o := ' scripts/mod/.file2alias.o.cmd | sed 's/cmd_scripts\/mod\/file2alias.o := //g')
+          CMD_3=$(grep  'cmd_scripts/mod/sumversion.o := ' scripts/mod/.sumversion.o.cmd | sed 's/cmd_scripts\/mod\/sumversion.o := //g')
+          CMD_L=$(grep  'cmd_scripts/mod/modpost := ' scripts/mod/.modpost.cmd | sed 's/cmd_scripts\/mod\/modpost := //g')
+          $CMD_O
+          $CMD_2
+          $CMD_3
+          $CMD_L
+          popd
+        fi
+
         echo "=== Building kernelsu.ko for KMI: ${{ inputs.kmi }} ==="
 
         CONFIG_KSU=m CC=clang make
