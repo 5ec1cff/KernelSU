@@ -132,7 +132,7 @@ static int do_set_sepolicy(void __user *arg)
         return -EFAULT;
     }
 
-    return handle_sepolicy(cmd.cmd, (void __user *)cmd.arg);
+    return handle_sepolicy(cmd.count, (void __user *)cmd.arg);
 }
 
 static int do_check_safemode(void __user *arg)

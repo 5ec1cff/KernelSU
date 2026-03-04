@@ -27,7 +27,8 @@ struct ksu_report_event_cmd {
 
 struct ksu_set_sepolicy_cmd {
     __u64 cmd; // Input: sepolicy command
-    __aligned_u64 arg; // Input: sepolicy argument pointer
+    __aligned_u64 arg; // Input: sepolicies argument pointer
+    __u32 count; // Input: count of sepolicies
 };
 
 struct ksu_check_safemode_cmd {
@@ -114,7 +115,7 @@ struct ksu_add_try_umount_cmd {
 #define KSU_IOCTL_GRANT_ROOT _IOC(_IOC_NONE, 'K', 1, 0)
 #define KSU_IOCTL_GET_INFO _IOC(_IOC_READ, 'K', 2, 0)
 #define KSU_IOCTL_REPORT_EVENT _IOC(_IOC_WRITE, 'K', 3, 0)
-#define KSU_IOCTL_SET_SEPOLICY _IOC(_IOC_READ | _IOC_WRITE, 'K', 4, 0)
+#define KSU_IOCTL_SET_SEPOLICY _IOWR('K', 4, struct ksu_set_sepolicy_cmd)
 #define KSU_IOCTL_CHECK_SAFEMODE _IOC(_IOC_READ, 'K', 5, 0)
 // deprecated
 #define KSU_IOCTL_GET_ALLOW_LIST _IOC(_IOC_READ | _IOC_WRITE, 'K', 6, 0)
