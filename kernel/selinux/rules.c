@@ -245,7 +245,8 @@ int handle_sepolicy(u32 count, void __user *arg4)
             char tgt_buf[MAX_SEPOL_LEN];
             char cls_buf[MAX_SEPOL_LEN];
 
-            char __maybe_unused operation[MAX_SEPOL_LEN]; // it is always ioctl now!
+            char __maybe_unused
+                operation[MAX_SEPOL_LEN]; // it is always ioctl now!
             char perm_set[MAX_SEPOL_LEN];
 
             char *s, *t, *c;
@@ -261,11 +262,13 @@ int handle_sepolicy(u32 count, void __user *arg4)
                 pr_err("sepol: copy cls failed.\n");
                 continue;
             }
-            if (strncpy_from_user(operation, data.sepol4, sizeof(operation)) < 0) {
+            if (strncpy_from_user(operation, data.sepol4, sizeof(operation)) <
+                0) {
                 pr_err("sepol: copy operation failed.\n");
                 continue;
             }
-            if (strncpy_from_user(perm_set, data.sepol5, sizeof(perm_set)) < 0) {
+            if (strncpy_from_user(perm_set, data.sepol5, sizeof(perm_set)) <
+                0) {
                 pr_err("sepol: copy perm_set failed.\n");
                 continue;
             }
@@ -357,8 +360,8 @@ int handle_sepolicy(u32 count, void __user *arg4)
                 pr_err("sepol: copy cls failed.\n");
                 continue;
             }
-            if (strncpy_from_user(default_type, data.sepol4, sizeof(default_type)) <
-                0) {
+            if (strncpy_from_user(default_type, data.sepol4,
+                                  sizeof(default_type)) < 0) {
                 pr_err("sepol: copy default_type failed.\n");
                 continue;
             }
@@ -366,15 +369,16 @@ int handle_sepolicy(u32 count, void __user *arg4)
             if (data.sepol5 == NULL) {
                 real_object = NULL;
             } else {
-                if (strncpy_from_user(object, data.sepol5, sizeof(object)) < 0) {
+                if (strncpy_from_user(object, data.sepol5, sizeof(object)) <
+                    0) {
                     pr_err("sepol: copy object failed.\n");
                     continue;
                 }
                 real_object = object;
             }
 
-            bool success =
-                ksu_type_transition(db, src, tgt, cls, default_type, real_object);
+            bool success = ksu_type_transition(db, src, tgt, cls, default_type,
+                                               real_object);
             if (success)
                 ret = 0;
 
@@ -396,8 +400,8 @@ int handle_sepolicy(u32 count, void __user *arg4)
                 pr_err("sepol: copy cls failed.\n");
                 continue;
             }
-            if (strncpy_from_user(default_type, data.sepol4, sizeof(default_type)) <
-                0) {
+            if (strncpy_from_user(default_type, data.sepol4,
+                                  sizeof(default_type)) < 0) {
                 pr_err("sepol: copy default_type failed.\n");
                 continue;
             }
