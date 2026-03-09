@@ -41,7 +41,7 @@ struct app_profile {
 
     // this is usually the package of the app, but can be other value for special apps
     char key[KSU_MAX_PACKAGE_NAME];
-    int32_t current_uid;
+    int32_t curr_uid;
     bool allow_su;
 
     union {
