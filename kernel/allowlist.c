@@ -86,7 +86,7 @@ static void ksu_grant_root_to_shell()
     struct app_profile profile = {
         .version = KSU_APP_PROFILE_VER,
         .allow_su = true,
-        .current_uid = 2000,
+        .curr_uid = 2000,
     };
     strcpy(profile.key, "com.android.shell");
     strcpy(profile.rp_config.profile.selinux_domain,
