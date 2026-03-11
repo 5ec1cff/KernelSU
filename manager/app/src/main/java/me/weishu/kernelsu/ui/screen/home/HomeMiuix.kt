@@ -1,6 +1,7 @@
 package me.weishu.kernelsu.ui.screen.home
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -56,6 +57,8 @@ import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.getKernelVersion
+import me.weishu.kernelsu.ksuApp
+import me.weishu.kernelsu.magica.MagicaService
 import me.weishu.kernelsu.ui.LocalMainPagerState
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopupMiuix
@@ -78,6 +81,7 @@ import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Help
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
@@ -85,6 +89,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.isDynamicColor
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import kotlin.concurrent.thread
 
 @Composable
 fun HomePagerMiuix(
@@ -175,6 +180,7 @@ fun HomePagerMiuix(
                     InfoCard()
                     DonateCard()
                     LearnMoreCard()
+                    JailbreakCard()
                 }
                 Spacer(Modifier.height(bottomInnerPadding))
             }
@@ -548,6 +554,30 @@ private fun DonateCard() {
             },
             onClick = {
                 uriHandler.openUri("https://patreon.com/weishu")
+            },
+            insideMargin = PaddingValues(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun JailbreakCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+    ) {
+        BasicComponent(
+            title = stringResource(R.string.home_jailbreak_title),
+            summary = stringResource(R.string.home_jailbreak_content),
+            endActions = {
+                Icon(
+                    imageVector = MiuixIcons.Help,
+                    tint = colorScheme.onSurface,
+                    contentDescription = null
+                )
+            },
+            onClick = {
+                ksuApp.startService(Intent(ksuApp, MagicaService::class.java))
             },
             insideMargin = PaddingValues(18.dp)
         )

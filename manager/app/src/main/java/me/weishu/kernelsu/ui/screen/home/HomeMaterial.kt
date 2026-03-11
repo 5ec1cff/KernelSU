@@ -1,6 +1,7 @@
 package me.weishu.kernelsu.ui.screen.home
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -57,6 +58,8 @@ import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.getKernelVersion
+import me.weishu.kernelsu.ksuApp
+import me.weishu.kernelsu.magica.MagicaService
 import me.weishu.kernelsu.ui.LocalMainPagerState
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopup
@@ -134,6 +137,7 @@ fun HomePagerMaterial(
             }
             InfoCard()
             DonateCard()
+            JailbreakCard()
             LearnMoreCard()
             Spacer(Modifier.height(bottomInnerPadding))
         }
@@ -440,6 +444,33 @@ private fun DonateCard() {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.home_support_content),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun JailbreakCard() {
+    TonalCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    ksuApp.startService(Intent(ksuApp, MagicaService::class.java))
+                }
+                .padding(24.dp), verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.home_jailbreak_title),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.home_jailbreak_content),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.outline
                 )
