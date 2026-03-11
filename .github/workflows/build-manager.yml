@@ -20,6 +20,7 @@ on:
       - 'kernel/**'
       - 'userspace/**'
   workflow_call:
+  workflow_dispatch:
 
 jobs:
   build-lkm:
