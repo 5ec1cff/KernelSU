@@ -218,7 +218,7 @@ jobs:
           fi
 
       - name: Upload build artifact
-        if: ${{ github.event_name == 'pull_request' || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) || github.ref_type == 'tag' }}
+        if: ${{ github.event_name != 'pull_request' || github.ref_type == 'tag' }}
         uses: actions/upload-artifact@v6
         with:
           name: manager
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload mappings
         uses: actions/upload-artifact@v6
-        if: ${{ ( github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' )) || github.ref_type == 'tag' }}
+        if: ${{ github.event_name != 'pull_request' || github.ref_type == 'tag' }}
         with:
           name: "mappings"
           path: "manager/app/build/outputs/mapping/release/"
