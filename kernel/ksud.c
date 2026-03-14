@@ -16,9 +16,6 @@
 #include <linux/namei.h>
 #include <linux/workqueue.h>
 #include <linux/uio.h>
-#include <asm/syscall.h>
-#include <asm/cacheflush.h>
-#include "hook.h"
 
 #include "manager.h"
 #include "allowlist.h"
@@ -28,6 +25,7 @@
 #include "ksud.h"
 #include "selinux/selinux.h"
 #include "throne_tracker.h"
+#include "syscall_hook.h"
 
 bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
@@ -540,28 +538,6 @@ static int input_handle_event_handler_pre(struct kprobe *p,
     return ksu_handle_input_handle_event(type, code, value);
 }
 
-static syscall_fn_t *syscall_table = NULL;
-
-static void replace_syscall_table(int nr, syscall_fn_t fn, syscall_fn_t *old)
-{
-    pr_info("syscall 0x%lx ", (uintptr_t)&syscall_table[nr]);
-    syscall_fn_t *orig_p = &syscall_table[nr], orig = READ_ONCE(*orig_p);
-    if (old) {
-        *old = orig;
-    }
-
-    pr_info("Before hook syscall %d, ptr=0x%lx, *ptr=0x%lx -> 0x%lx", nr,
-            (unsigned long)orig_p, (unsigned long)orig, (uintptr_t)fn);
-
-    if (ksu_patch_text(&syscall_table[nr], &fn, sizeof(fn),
-                       KSU_PATCH_TEXT_FLUSH_DCACHE)) {
-        pr_err("patch syscall %d failed", nr);
-    }
-
-    pr_info("After hook syscall %d, ptr=0x%lx, *ptr=0x%lx", nr,
-            (unsigned long)orig_p, (unsigned long)READ_ONCE(syscall_table[nr]));
-}
-
 static struct kprobe input_event_kp = {
     .symbol_name = "input_event",
     .pre_handler = input_handle_event_handler_pre,
@@ -574,14 +550,14 @@ static void do_stop_input_hook(struct work_struct *work)
 
 static void stop_init_rc_hook()
 {
-    replace_syscall_table(__NR_read, orig_sys_read, NULL);
-    replace_syscall_table(__NR_fstat, orig_sys_fstat, NULL);
+    ksu_replace_syscall_table(__NR_read, orig_sys_read, NULL);
+    ksu_replace_syscall_table(__NR_fstat, orig_sys_fstat, NULL);
     pr_info("unregister init_rc syscall hook\n");
 }
 
 static void stop_execve_hook()
 {
-    replace_syscall_table(__NR_execve, orig_sys_execve, NULL);
+    ksu_replace_syscall_table(__NR_execve, orig_sys_execve, NULL);
     pr_info("unhook sys_execve\n");
 }
 
@@ -600,11 +576,10 @@ static void stop_input_hook()
 void ksu_ksud_init()
 {
     int ret;
-    syscall_table = kallsyms_lookup_name("sys_call_table");
 
-    replace_syscall_table(__NR_execve, ksu_sys_execve, &orig_sys_execve);
-    replace_syscall_table(__NR_read, ksu_sys_read, &orig_sys_read);
-    replace_syscall_table(__NR_fstat, ksu_sys_fstat, &orig_sys_fstat);
+    ksu_replace_syscall_table(__NR_execve, ksu_sys_execve, &orig_sys_execve);
+    ksu_replace_syscall_table(__NR_read, ksu_sys_read, &orig_sys_read);
+    ksu_replace_syscall_table(__NR_fstat, ksu_sys_fstat, &orig_sys_fstat);
 
     ret = register_kprobe(&input_event_kp);
     pr_info("ksud: input_event_kp: %d\n", ret);

@@ -10,7 +10,7 @@ all: check_symbol
 	CONFIG_KSU=m make -C $(KDIR) M=$(MDIR) modules
 	./check_symbol kernelsu.ko $(KDIR)/vmlinux
 compdb:
-	python3 $(MDIR)/.vscode/generate_compdb.py -O $(KDIR) $(MDIR)
+	python3 $(MDIR)/../.vscode/generate_compdb.py -O $(KDIR) $(MDIR)
 clean:
 	make -C $(KDIR) M=$(MDIR) clean
 	rm check_symbol

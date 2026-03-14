@@ -146,9 +146,7 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
     pr_info("sys_execve su found\n");
     *filename_user = ksud_user_path();
 
-    escape_with_root_profile();
-
-    return 0;
+    return escape_with_root_profile();
 }
 
 // sucompat: permitted process can execute 'su' to gain root access.
