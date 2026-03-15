@@ -4,6 +4,7 @@ on:
   push:
     branches: [ "main", "dev", "ci" ]
     paths:
+      - 'README.md'
       - '.github/workflows/build-manager.yml'
       - '.github/workflows/build-lkm.yml'
       - '.github/workflows/ddk-lkm.yml'
