@@ -1,7 +1,9 @@
+#include "asm/unistd_64.h"
 #include "linux/compiler.h"
 #include "linux/cred.h"
 #include "linux/kallsyms.h"
 #include "linux/printk.h"
+#include "linux/compat.h"
 #include "selinux/selinux.h"
 #include <linux/spinlock.h>
 #include <linux/kprobes.h>
@@ -234,19 +236,6 @@ static struct kretprobe *syscall_regfunc_rp = NULL;
 static struct kretprobe *syscall_unregfunc_rp = NULL;
 #endif
 
-static inline bool check_syscall_fastpath(int nr)
-{
-    switch (nr) {
-    case __NR_newfstatat:
-    case __NR_faccessat:
-    case __NR_execve:
-    case __NR_setresuid:
-        return true;
-    default:
-        return false;
-    }
-}
-
 // Unmark init's child that are not zygote, adbd or ksud
 int ksu_handle_init_mark_tracker(const char __user **filename_user)
 {
@@ -261,7 +250,7 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
     fn = (const char __user *)addr;
 
     memset(path, 0, sizeof(path));
-    strncpy_from_user(path, fn, sizeof(path));
+    int ret = strncpy_from_user(path, fn, sizeof(path));
 
     if (ret < 0) {
         // unreadable path; keep mark to avoid wrongly unmarking zygote
@@ -281,17 +270,8 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
     return 0;
 }
 
-#define MAGIC_VALUE 0xdeadbeef
-
-#define CHECK_SYSCALL                                                          \
-    if (regs->unused2 != MAGIC_VALUE)                                          \
-        return -ENOSYS;                                                        \
-    ((struct pt_regs *)regs)->unused2 = 0;
-
 static long ksu_syscall_newfstatat(const struct pt_regs *regs)
 {
-    CHECK_SYSCALL
-
     int *dfd = (int *)&PT_REGS_PARM1(regs);
     const char __user **filename_user =
         (const char __user **)&PT_REGS_PARM2(regs);
@@ -303,8 +283,6 @@ static long ksu_syscall_newfstatat(const struct pt_regs *regs)
 
 static long ksu_syscall_faccessat(const struct pt_regs *regs)
 {
-    CHECK_SYSCALL
-
     int *dfd = (int *)&PT_REGS_PARM1(regs);
     const char __user **filename_user =
         (const char __user **)&PT_REGS_PARM2(regs);
@@ -317,7 +295,6 @@ static long ksu_syscall_faccessat(const struct pt_regs *regs)
 static long ksu_syscall_execve(const struct pt_regs *regs)
 {
     int ret;
-    CHECK_SYSCALL
 
     const char __user **filename_user =
         (const char __user **)&PT_REGS_PARM1(regs);
@@ -335,8 +312,6 @@ static long ksu_syscall_execve(const struct pt_regs *regs)
 
 static long ksu_syscall_setresuid(const struct pt_regs *regs)
 {
-    CHECK_SYSCALL
-
     uid_t ruid = (uid_t)PT_REGS_PARM1(regs);
     uid_t euid = (uid_t)PT_REGS_PARM2(regs);
     uid_t suid = (uid_t)PT_REGS_PARM3(regs);
@@ -345,67 +320,86 @@ static long ksu_syscall_setresuid(const struct pt_regs *regs)
     return ksu_syscall_table[__NR_setresuid](regs);
 }
 
-static int nr_for_setresuid = -1;
-static int nr_for_execve = -1;
-static int nr_for_newfstatat = -1;
-static int nr_for_faccessat = -1;
+#define NR_REDIRECTED __NR_reboot
+
+inline void setup_redirect_syscall(struct pt_regs *regs, int nr)
+{
+#if defined(__aarch64__)
+    regs->orig_x0 = ~(regs->orig_x0 & 0xffffffff) | (((u64) nr) << 32);
+    regs->syscallno = NR_REDIRECTED;
+#elif defined(__x86_64__)
+    unsigned long orig_ax = regs->orig_ax;
+    regs->orig_ax = NR_REDIRECTED | (((u64) nr) << 32);
+    pr_info("redirect 0x%lx->0x%lx\n", orig_ax, regs->orig_ax);
+#endif
+    
+}
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
 // Generic sys_enter handler that dispatches to specific handlers
 static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 {
-    if (unlikely(is_compat_task())) {
+    bool redirect = false;
+    if (unlikely(in_compat_syscall())) {
         return;
     }
-    struct pt_regs *current_regs = task_pt_regs(current);
-    if (unlikely(check_syscall_fastpath(id))) {
-        if (ksu_su_compat_enabled) {
-            // Handle newfstatat
-            if (id == __NR_newfstatat) {
-                if (nr_for_newfstatat < 0)
-                    return;
-                current_regs->syscallno = nr_for_newfstatat;
-                current_regs->unused2 = MAGIC_VALUE;
-                return;
-            }
-
-            // Handle faccessat
-            if (id == __NR_faccessat) {
-                if (nr_for_faccessat < 0)
-                    return;
-                current_regs->syscallno = nr_for_faccessat;
-                current_regs->unused2 = MAGIC_VALUE;
-                return;
-            }
-
-            // Handle execve
-            if (id == __NR_execve) {
-                if (nr_for_execve < 0)
-                    return;
-                current_regs->syscallno = nr_for_execve;
-                current_regs->unused2 = MAGIC_VALUE;
-                return;
-            }
-        }
-
-        // Handle setresuid
-        if (id == __NR_setresuid) {
-            if (nr_for_setresuid < 0)
-                return;
-            current_regs->syscallno = nr_for_setresuid;
-            current_regs->unused2 = MAGIC_VALUE;
-            return;
-        }
+    switch (id) {
+        case __NR_setresuid:
+            redirect = true;
+            break;
+        case __NR_newfstatat:
+        case __NR_faccessat:
+        case __NR_execve:
+            redirect = ksu_su_compat_enabled;
+            break;
+    }
+    if (unlikely(redirect)) {
+        setup_redirect_syscall(task_pt_regs(current), id);
     }
 }
 #endif
 
+static ksu_syscall_fn_t ksu_orig_syscall;
+static long ksu_redirected_syscall(const struct pt_regs *regs) {
+
+#if defined(__aarch64__)
+    bool is_redirected = (regs->orig_x0 & 0xffffffff) == ((~regs->regs[0]) & 0xffffffff);
+#elif defined(__x86_64__)
+    bool is_redirected = (regs->orig_ax >> 32) != 0;
+#endif
+
+    if (is_redirected) {
+#if defined(__aarch64__)
+        u32 orig_nr = regs->orig_x0 >> 32;
+        ((struct pt_regs *) regs)->orig_x0 = regs->regs[0];
+#elif defined(__x86_64__)
+        u32 orig_nr = regs->orig_ax >> 32;
+        // ((struct pt_regs *) regs)->orig_ax = regs->ax;
+#endif
+        pr_info("orig_nr %d\n", orig_nr);
+        switch (orig_nr) {
+            case __NR_setresuid:
+                return ksu_syscall_setresuid(regs);
+            case __NR_execve:
+                return ksu_syscall_execve(regs);
+            case __NR_newfstatat:
+                return ksu_syscall_newfstatat(regs);
+            case __NR_faccessat:
+                return ksu_syscall_faccessat(regs);
+            default:
+                pr_info("not handling this nr\n");
+                return -ENOSYS;
+        }
+    } else {
+        pr_info("not redirected\n");
+    }
+
+    return ksu_orig_syscall(regs);
+}
+
 void ksu_syscall_hook_manager_init(void)
 {
-    int ret, i, nr_count = 0;
-    unsigned long arm64_sys_ni_syscall;
-    int *nrps[4] = { &nr_for_setresuid, &nr_for_execve, &nr_for_newfstatat,
-                     &nr_for_faccessat };
+    int ret;
     pr_info("hook_manager: ksu_hook_manager_init called\n");
 
 #ifdef CONFIG_KRETPROBES
@@ -417,32 +411,7 @@ void ksu_syscall_hook_manager_init(void)
         init_kretprobe("syscall_unregfunc", syscall_unregfunc_handler);
 #endif
 
-    arm64_sys_ni_syscall =
-        kallsyms_lookup_name("__arm64_sys_ni_syscall.cfi_jt");
-    if (!arm64_sys_ni_syscall) {
-        arm64_sys_ni_syscall = kallsyms_lookup_name("__arm64_sys_ni_syscall");
-    }
-    pr_info("__arm64_sys_ni_syscall: 0x%lx\n",
-            (unsigned long)arm64_sys_ni_syscall);
-
-    for (i = 0; i < __NR_syscalls; i++) {
-        if ((unsigned long)ksu_syscall_table[i] == arm64_sys_ni_syscall) {
-            *nrps[nr_count++] = i;
-            pr_info("ni_syscall %d: %d\n", nr_count, i);
-            if (nr_count == ARRAY_SIZE(nrps)) {
-                break;
-            }
-        }
-    }
-
-    if (nr_count != ARRAY_SIZE(nrps)) {
-        pr_err("not enough ni_syscall: %d !!!\n", nr_count);
-    }
-
-    ksu_replace_syscall_table(nr_for_setresuid, ksu_syscall_setresuid, NULL);
-    ksu_replace_syscall_table(nr_for_execve, ksu_syscall_execve, NULL);
-    ksu_replace_syscall_table(nr_for_newfstatat, ksu_syscall_newfstatat, NULL);
-    ksu_replace_syscall_table(nr_for_faccessat, ksu_syscall_faccessat, NULL);
+    ksu_replace_syscall_table(NR_REDIRECTED, ksu_redirected_syscall, &ksu_orig_syscall);
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
     ret = register_trace_sys_enter(ksu_sys_enter_handler, NULL);
