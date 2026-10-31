@@ -157,10 +157,9 @@ void apply_kernelsu_rules()
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
     // Keep recursive restorecon from traversing /data/adb and relabeling modules.
-    // Unreadable directories are skipped without preventing sehash updates.
-    // Preserve search so init can stat /data/adb/ksud before starting it.
-    ksu_deny(db, "init", "adb_data_file", "dir", "read");
-    ksu_deny(db, "vendor_init", "adb_data_file", "dir", "read");
+    // Keep read so init can check the directory's encryption policy.
+    ksu_deny(db, "init", "adb_data_file", "dir", "search");
+    ksu_deny(db, "vendor_init", "adb_data_file", "dir", "search");
 
     rcu_assign_pointer(selinux_state.policy, pol);
     synchronize_rcu();
